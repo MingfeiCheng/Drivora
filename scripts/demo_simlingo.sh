@@ -2,13 +2,14 @@
 set -euo pipefail
 
 # ==== GPU Config ====
-export CUDA_VISIBLE_DEVICES=2,3   # 限制只使用 GPU0
+export CUDA_VISIBLE_DEVICES=2,3 
 
 # ==== Common Config ====
 output_root="results"
 run_index=1
 max_sim_time=600.0
 open_vis=true
+distribute_num=2  # Number of distributed execution instances
 
 # Carla
 carla_image="carlasim/carla:0.9.15"
@@ -33,6 +34,7 @@ run_tag="${tester_type}_${agent_name}_${seed_segment}_${seed_id}_run${run_index}
 # ==== Run (Hydra style overrides) ====
 python start_fuzzer.py \
   output_root="$output_root" \
+  distribute_num="$distribute_num" \
   run_tag="$run_tag" \
   max_sim_time="$max_sim_time" \
   open_vis="$open_vis" \

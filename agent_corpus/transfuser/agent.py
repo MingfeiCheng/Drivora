@@ -12,14 +12,12 @@ from PIL import Image
 from collections import deque
 from shapely.geometry import Polygon
 
-from loguru import logger
 
 from .model import LidarCenterNet
 from .config import GlobalConfig
 from .data import lidar_to_histogram_features, draw_target_point, lidar_bev_cam_correspondences
 
-from scenario.ads_interface.agent import AutonomousAgent
-from fuzzer.interlocker.planning_message import PlanningMessage
+from agent_corpus.atomic.base_agent import AutonomousAgent
 
 class HybridAgent(AutonomousAgent):
     def setup(self, path_to_conf_file):
@@ -259,7 +257,6 @@ class HybridAgent(AutonomousAgent):
         # divide by 2 because we process every second frame
         # 1100 = 55 seconds * 20 Frames per second, we move for 1.5 second = 30 frames to unblock
         if(self.stuck_detector > self.config.stuck_threshold and self.forced_move < self.config.creep_duration):
-            logger.debug("Detected agent being stuck. Move for frame: {} ", self.forced_move)
             is_stuck = True
             self.forced_move += 1
 
@@ -341,9 +338,6 @@ class HybridAgent(AutonomousAgent):
 
         steer, throttle, brake, published_waypoints = self.nets[0].control_pid(self.pred_wp, gt_velocity, is_stuck)
         
-        ####### NOTE: intersted planning waypoint publisher #######
-        PlanningMessage.set_planning_message(self.id, published_waypoints, require_convert=True)
-
         if is_stuck and self.forced_move==1: # no steer for initial frame when unblocking
             steer = 0.0
 
@@ -365,7 +359,7 @@ class HybridAgent(AutonomousAgent):
         if self.use_lidar_safe_check:
             emergency_stop = (len(safety_box) > 0) #Checks if the List is empty
             if ((emergency_stop == True) and (is_stuck == True)):  # We only use the saftey box when unblocking
-                logger.debug("Detected object directly in front of the vehicle. Stopping. Step:", self.step)
+                print("Detected object directly in front of the vehicle. Stopping. Step:", self.step)
                 control.steer = float(steer)
                 control.throttle = float(0.0)
                 control.brake = float(True)

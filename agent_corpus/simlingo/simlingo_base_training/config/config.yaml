@@ -1,0 +1,3 @@
+defaults:
+  - train_base
+  - experiment: debug #simlingo_base_1

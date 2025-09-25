@@ -1,0 +1,8 @@
+
+# can replace with your base env
+FROM erdosproject/pylot:latest
+
+WORKDIR /app
+COPY . /app
+
+RUN bash /app/install_base.sh

@@ -1,0 +1,40 @@
+# @package _global_
+defaults:
+  - /data_module: carla_bucket_v12
+  - /model/vision_model: llavanext
+
+model:
+  lr: 3e-5
+  vision_lr: 3e-5
+  predict_route_as_wps: True
+  speed_wps_mode: '2d'
+  language_model:
+    variant: tiny
+    lora: False
+    _target_: simlingo_base_training.models.language_model.llama.Llama
+  vision_model:
+    downsample_feature_grid_factor: 2
+
+data_module:
+  data_path: database/simlingo
+  bucket_path: database/buckets_simlingo
+  batch_size: 28
+  num_workers: 10
+  route_as: target_point
+  hist_len: 1
+  cut_bottom_quarter: False
+  use_global_img: False
+
+  img_shift_augmentation: True
+  img_shift_augmentation_prob: 0.5
+  image_enhancing: True
+
+max_epochs: 30
+seed: 9876
+gpus: 8
+val_every_n_epochs: 2
+name: simlingo_base_seed_9876
+
+hydra:
+  run:
+    dir: outputs/${wandb_name}_${name}

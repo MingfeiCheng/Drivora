@@ -1,0 +1,42 @@
+# basic config
+debug: true
+pytree_debug: false  # Enable py_trees debug mode
+open_vis: true  # Open visualization
+resume: true
+max_sim_time: 30.0  # seconds, default is 120 seconds -> the scenario max running time
+distribute_num: 2
+
+# tag is important for identification
+run_tag: ""
+
+# path
+output_root: ""
+
+# container config & carla 
+# NOTE: currently, only one carla container is supported, can be extended
+carla:
+  image: "carlasim/carla:0.9.10.1"
+  fps: 25
+  is_sync: true
+  random_seed: 42  # random seed for carla server
+
+# fuzzer config
+tester: 
+  type: 'random'  # the fuzzer to use
+  time_budget: 4  # hours, time budget for the fuzzer  
+  config_path: '' # just give the config path
+
+agent:
+  entry_point: "agent_corpus.roach.agent:RoachAgent"
+  config_path: "/data/d/mingfeicheng/github/Drivora-dev/Carla/agent_corpus/roach/config/config_agent.yaml"
+
+scenario:
+  type: "open_scenario"
+  seed_path: "/data/d/mingfeicheng/github/Drivora-dev/Carla/scenario_datasets/open_scenario/Town01/route_50_100/Town01_0001.json"
+
+hydra:
+  output_subdir: null
+  job:
+    chdir: false
+  run:
+    dir: ${output_root}/hydra

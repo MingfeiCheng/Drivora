@@ -19,20 +19,23 @@ import carla
 
 from filterpy.kalman import MerweScaledSigmaPoints
 from filterpy.kalman import UnscentedKalmanFilter as UKF
-from .carla_agent_files.agent_utils.filter_functions import *
-from .carla_agent_files.agent_utils import transfuser_utils
-from .carla_agent_files.perception_submissionagent import PerceptionAgent
-from .carla_agent_files.nav_planner import RoutePlanner_new as RoutePlanner
+from carla_agent_files.agent_utils.filter_functions import *
+from carla_agent_files.agent_utils import transfuser_utils
+from carla_agent_files.perception_submissionagent import PerceptionAgent
+from carla_agent_files.nav_planner import RoutePlanner_new as RoutePlanner
 
-from .training.PlanT.dataset import generate_batch, split_large_BB
-from .training.PlanT.lit_module import LitHFLM
-from .training.Perception.config import GlobalConfig
+from training.PlanT.dataset import generate_batch, split_large_BB
+from training.PlanT.lit_module import LitHFLM
+from training.Perception.config import GlobalConfig
 
 from agent_corpus.atomic.base_agent import AutonomousAgent
 
 class PlanTPerceptionAgent(AutonomousAgent):
     def setup(self, path_to_conf_file, route_index=None, cfg=None, exec_or_inter=None):
-        self.cfg = cfg
+        
+        
+        self.cfg = OmegaConf.load(path_to_conf_file)
+        self.cfg.viz = 0
         
         # hydra.core.global_hydra.GlobalHydra.instance().clear()
         # initialize(config_path="config", job_name="test_app")
@@ -50,15 +53,21 @@ class PlanTPerceptionAgent(AutonomousAgent):
         torch.cuda.empty_cache()
         
         # first args than super setup is important!
-        args_file = open(os.path.join(path_to_conf_file, f'{self.cfg.model_ckpt_load_path}/log/args.txt'), 'r')
+        # args_file = open(os.path.join(path_to_conf_file, f'{self.cfg.model_ckpt_load_path}/log/args.txt'), 'r')
+        checkpoint_path = os.path.join(os.path.dirname(__file__), 'checkpoints')
+        args_file = open(os.path.join(checkpoint_path, f'{self.cfg.model_ckpt_load_path}/log/args.txt'), 'r')
         self.args = json.load(args_file)
         args_file.close()
         self.cfg_agent = OmegaConf.create(self.args)
         self.config = GlobalConfig(setting='eval')
 
         self.steer_damping = self.config.steer_damping
-        self.perception_agent = PerceptionAgent(Path(f'{path_to_conf_file}/{self.cfg.perception_ckpt_load_path}'))
+        # self.perception_agent = PerceptionAgent(Path(f'{path_to_conf_file}/{self.cfg.perception_ckpt_load_path}'))
+        self.perception_agent = PerceptionAgent()
+        self.perception_agent.setup(Path(f'{str(checkpoint_path)}/{self.cfg.perception_ckpt_load_path}'))
         self.perception_agent.cfg = self.cfg
+        
+        print(f"cfg: {self.cfg}")
         
         # Filtering
         self.points = MerweScaledSigmaPoints(n=4,
@@ -89,7 +98,8 @@ class PlanTPerceptionAgent(AutonomousAgent):
         # Used to realign.
         self.state_log = deque(maxlen=4)
 
-        LOAD_CKPT_PATH = f'{path_to_conf_file}/{self.cfg.model_ckpt_load_path}/checkpoints/epoch=0{self.cfg.PlanT_epoch}.ckpt'
+        # LOAD_CKPT_PATH = f'{path_to_conf_file}/{self.cfg.model_ckpt_load_path}/checkpoints/epoch=0{self.cfg.PlanT_epoch}.ckpt'
+        LOAD_CKPT_PATH = f'{str(checkpoint_path)}/{self.cfg.model_ckpt_load_path}/checkpoints/epoch=0{self.cfg.PlanT_epoch}.ckpt'
 
         print(f'Loading model from {LOAD_CKPT_PATH}')
 
@@ -269,6 +279,8 @@ class PlanTPerceptionAgent(AutonomousAgent):
     @torch.no_grad()
     def run_step(self, input_data, timestamp, keep_ids=None):
         
+        agent_log = {}
+        
         self.keep_ids = keep_ids
 
         self.step += 1
@@ -282,7 +294,7 @@ class PlanTPerceptionAgent(AutonomousAgent):
             # if self.exec_or_inter == 'inter':
             #     return [], None
             _ = self.tick(input_data)
-            return self.control
+            return self.control, agent_log
             
         tick_data = self.tick(input_data)
         
@@ -303,7 +315,7 @@ class PlanTPerceptionAgent(AutonomousAgent):
                 self.control.throttle = 0.0
                 self.control.steer = 0.0
         
-        return self.control
+        return self.control, agent_log
 
 
     def _get_control(self, label_raw, label_raw_gt, input_data):

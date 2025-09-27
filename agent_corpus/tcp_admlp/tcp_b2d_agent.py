@@ -16,9 +16,9 @@ from PIL import Image
 from torchvision import transforms as T
 from scipy.optimize import fsolve
 
-from .TCP.model import TCP
-from .TCP.config import GlobalConfig
-from .team_code.planner import RoutePlanner
+from TCP.model import TCP
+from TCP.config import GlobalConfig
+from team_code.planner import RoutePlanner
 
 from agent_corpus.atomic.base_agent import AutonomousAgent
 
@@ -45,6 +45,7 @@ class TCPAgent(AutonomousAgent):
 			self.save_name = path_to_conf_file.split('+')[-1]
 			self.config_path = path_to_conf_file.split('+')[0]
 		else:
+			now = datetime.datetime.now()
 			self.config_path = path_to_conf_file
 			self.save_name = '_'.join(map(lambda x: '%02d' % x, (now.month, now.day, now.hour, now.minute, now.second)))
 		self.step = -1
@@ -74,6 +75,7 @@ class TCPAgent(AutonomousAgent):
 
 		self.last_steers = deque()
 		# self.lat_ref, self.lon_ref = 42.0, 2.0
+		SAVE_PATH = os.path.join(self.scenario_dir, 'agent/internal')
 		if SAVE_PATH is not None:
 			now = datetime.datetime.now()
 			# string = pathlib.Path(os.environ['ROUTES']).stem + '_'
@@ -82,7 +84,7 @@ class TCPAgent(AutonomousAgent):
 
 			print (string)
 
-			self.save_path = pathlib.Path(os.environ['SAVE_PATH']) / string
+			self.save_path = pathlib.Path(SAVE_PATH) / string
 			self.save_path.mkdir(parents=True, exist_ok=False)
 
 			(self.save_path / 'rgb').mkdir()
@@ -160,15 +162,15 @@ class TCPAgent(AutonomousAgent):
 					},
 				]
 		
-		if IS_BENCH2DRIVE:
-			sensors += [
-					{	
-						'type': 'sensor.camera.rgb',
-						'x': 0.0, 'y': 0.0, 'z': 50.0,
-						'roll': 0.0, 'pitch': -90.0, 'yaw': 0.0,
-						'width': 512, 'height': 512, 'fov': 5 * 10.0,
-						'id': 'bev'
-					}]
+		# if IS_BENCH2DRIVE:
+		sensors += [
+				{	
+					'type': 'sensor.camera.rgb',
+					'x': 0.0, 'y': 0.0, 'z': 50.0,
+					'roll': 0.0, 'pitch': -90.0, 'yaw': 0.0,
+					'width': 512, 'height': 512, 'fov': 5 * 10.0,
+					'id': 'bev'
+				}]
 		return sensors
 
 	def tick(self, input_data):
@@ -232,6 +234,8 @@ class TCPAgent(AutonomousAgent):
 	
 	@torch.no_grad()
 	def run_step(self, input_data, timestamp):
+		agent_log = {}
+  
 		if not self.initialized:
 			self._init()
 		tick_data = self.tick(input_data)
@@ -243,7 +247,7 @@ class TCPAgent(AutonomousAgent):
 			control.throttle = 0.0
 			control.brake = 0.0
 			
-			return control
+			return control, agent_log
 
 		gt_velocity = torch.FloatTensor([tick_data['speed']]).to('cuda', dtype=torch.float32)
 		command = tick_data['next_command']
@@ -333,7 +337,7 @@ class TCPAgent(AutonomousAgent):
 		self.metric_info[self.step] = metric_info
 		if SAVE_PATH is not None and self.step % 1 == 0:
 			self.save(tick_data)
-		return control
+		return control, agent_log
 
 	def save(self, tick_data):
 		frame = self.step

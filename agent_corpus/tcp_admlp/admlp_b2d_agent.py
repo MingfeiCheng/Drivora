@@ -39,6 +39,7 @@ class ADMLPAgent(AutonomousAgent):
 			self.save_name = path_to_conf_file.split('+')[-1]
 			self.config_path = path_to_conf_file.split('+')[0]
 		else:
+			now = datetime.datetime.now()
 			self.config_path = path_to_conf_file
 			self.save_name = '_'.join(map(lambda x: '%02d' % x, (now.month, now.day, now.hour, now.minute, now.second)))
 		self.step = -1
@@ -59,6 +60,7 @@ class ADMLPAgent(AutonomousAgent):
 		self.net.eval()
 
 		self.save_path = None
+		SAVE_PATH = os.path.join(self.scenario_dir, 'agent/internal')
 		# self.lat_ref, self.lon_ref = 42.0, 2.0
 		if SAVE_PATH is not None:
 			now = datetime.datetime.now()
@@ -68,7 +70,7 @@ class ADMLPAgent(AutonomousAgent):
 
 			print (string)
 
-			self.save_path = pathlib.Path(os.environ['SAVE_PATH']) / string
+			self.save_path = pathlib.Path(SAVE_PATH) / string
 			self.save_path.mkdir(parents=True, exist_ok=False)
 
 			(self.save_path / 'rgb').mkdir()
@@ -132,15 +134,15 @@ class ADMLPAgent(AutonomousAgent):
 					},
 				]
 		
-		if IS_BENCH2DRIVE:
-			sensors += [
-					{	
-						'type': 'sensor.camera.rgb',
-						'x': 0.0, 'y': 0.0, 'z': 50.0,
-						'roll': 0.0, 'pitch': -90.0, 'yaw': 0.0,
-						'width': 512, 'height': 512, 'fov': 5 * 10.0,
-						'id': 'bev'
-					}]
+		# if IS_BENCH2DRIVE:
+		sensors += [
+				{	
+					'type': 'sensor.camera.rgb',
+					'x': 0.0, 'y': 0.0, 'z': 50.0,
+					'roll': 0.0, 'pitch': -90.0, 'yaw': 0.0,
+					'width': 512, 'height': 512, 'fov': 5 * 10.0,
+					'id': 'bev'
+				}]
 		return sensors
 
 	def tick(self, input_data):
@@ -176,6 +178,8 @@ class ADMLPAgent(AutonomousAgent):
 	
 	@torch.no_grad()
 	def run_step(self, input_data, timestamp):
+		agent_log = {}
+  
 		if not self.initialized:
 			self._init()
 		tick_data = self.tick(input_data)
@@ -190,10 +194,10 @@ class ADMLPAgent(AutonomousAgent):
 			control.throttle = 0.0
 			control.brake = 0.0
 			self.last_control = control
-			return control
+			return control, agent_log
 		
 		if (self.step -  self.data_queue_len) % 10 != 0:
-			return self.last_control
+			return self.last_control, agent_log
 		
 		# Process
 		ego_x = self.data_queue[-1]['x']
@@ -207,9 +211,9 @@ class ADMLPAgent(AutonomousAgent):
 
 		waypoints = []
 		theta = []
-		print(len(self.data_queue), self.step)
+		# print(len(self.data_queue), self.step)
 		for index in range(len(self.data_queue)-1, len(self.data_queue)-1-20-1, -5):
-			print(index)
+			# print(index)
 			R = np.array([
 			[np.cos(ego_theta), np.sin(ego_theta)],
 			[-np.sin(ego_theta),  np.cos(ego_theta)]
@@ -291,7 +295,7 @@ class ADMLPAgent(AutonomousAgent):
 		if SAVE_PATH is not None and (self.step -  self.data_queue_len) % 1 == 0:
 			self.save(tick_data)
 		self.last_control = control
-		return control
+		return control, agent_log
 
 	def save(self, tick_data):
 		frame = self.step

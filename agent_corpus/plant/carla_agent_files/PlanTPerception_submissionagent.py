@@ -24,7 +24,7 @@ from carla_agent_files.agent_utils.filter_functions import *
 from carla_agent_files.agent_utils import transfuser_utils
 
 from leaderboard.autoagents import autonomous_agent
-from carla_agent_files.perception_submissionagent import PerceptionAgent
+from agent_corpus.plant.carla_agent_files.perception_submissionagent import PerceptionAgent
 from training.PlanT.dataset import generate_batch, split_large_BB
 from training.PlanT.lit_module import LitHFLM
 from training.Perception.config import GlobalConfig

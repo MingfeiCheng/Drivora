@@ -40,6 +40,7 @@ class UniadAgent(AutonomousAgent):
         self.pidcontroller = PIDController() 
         self.config_path = path_to_conf_file.split('+')[0]
         self.ckpt_path = path_to_conf_file.split('+')[1]
+        now = datetime.datetime.now()
         if IS_BENCH2DRIVE:
             self.save_name = path_to_conf_file.split('+')[-1]
         else:
@@ -48,7 +49,8 @@ class UniadAgent(AutonomousAgent):
         self.wall_start = time.time()
         self.initialized = False
         cfg = Config.fromfile(self.config_path)
-        cfg.model['motion_head']['anchor_info_path'] = os.path.join('Bench2DriveZoo',cfg.model['motion_head']['anchor_info_path'])
+        # cfg.model['motion_head']['anchor_info_path'] = os.path.join('Bench2DriveZoo',cfg.model['motion_head']['anchor_info_path'])
+        cfg.model['motion_head']['anchor_info_path'] = os.path.join(os.path.dirname(__file__), cfg.model['motion_head']['anchor_info_path'])
         if hasattr(cfg, 'plugin'):
             if cfg.plugin:
                 import importlib
@@ -84,11 +86,14 @@ class UniadAgent(AutonomousAgent):
         control.throttle = 0.0
         control.brake = 0.0	
         self.prev_control = control
+        
+        SAVE_PATH = os.path.join(self.scenario_dir, "agent/internal")
         if SAVE_PATH is not None:
             now = datetime.datetime.now()
             # string = pathlib.Path(os.environ['ROUTES']).stem + '_'
             string = self.save_name
-            self.save_path = pathlib.Path(os.environ['SAVE_PATH']) / string
+            # self.save_path = pathlib.Path(os.environ['SAVE_PATH']) / string
+            self.save_path = pathlib.Path(str(SAVE_PATH)) / string
             self.save_path.mkdir(parents=True, exist_ok=False)
             (self.save_path / 'rgb_front').mkdir()
             (self.save_path / 'rgb_front_right').mkdir()
@@ -258,15 +263,15 @@ class UniadAgent(AutonomousAgent):
                 
             ]
         
-        if IS_BENCH2DRIVE:
-            sensors += [
-                    {	
-                        'type': 'sensor.camera.rgb',
-                        'x': 0.0, 'y': 0.0, 'z': 50.0,
-                        'roll': 0.0, 'pitch': -90.0, 'yaw': 0.0,
-                        'width': 512, 'height': 512, 'fov': 5 * 10.0,
-                        'id': 'bev'
-                    }]
+        # if IS_BENCH2DRIVE:
+        sensors += [
+                {	
+                    'type': 'sensor.camera.rgb',
+                    'x': 0.0, 'y': 0.0, 'z': 50.0,
+                    'roll': 0.0, 'pitch': -90.0, 'yaw': 0.0,
+                    'width': 512, 'height': 512, 'fov': 5 * 10.0,
+                    'id': 'bev'
+                }]
         return sensors
 
     def tick(self, input_data):
@@ -309,6 +314,8 @@ class UniadAgent(AutonomousAgent):
     
     @torch.no_grad()
     def run_step(self, input_data, timestamp):
+        agent_log = {}
+        
         if not self.initialized:
             self._init()
         tick_data = self.tick(input_data)
@@ -344,7 +351,7 @@ class UniadAgent(AutonomousAgent):
         can_bus[16] = ego_theta
         can_bus[17] = ego_theta / np.pi * 180 
         results['can_bus'] = can_bus
-        command = tick_data['command_near']
+        command = tick_data['command_near'].value
         if command < 0:
             command = 4
         command -= 1
@@ -397,7 +404,7 @@ class UniadAgent(AutonomousAgent):
         if SAVE_PATH is not None and self.step % 1 == 0:
             self.save(tick_data)
         self.prev_control = control
-        return control
+        return control, agent_log
 
     def save(self, tick_data):
         frame = self.step // 10

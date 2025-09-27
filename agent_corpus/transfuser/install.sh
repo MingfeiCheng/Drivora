@@ -2,7 +2,7 @@
 
 # conda create -n tfuse python=3.7 -y 
 # export CUDA_HOME=/usr/local/cuda-11.8 # may setup cuda path before install
-export CUDA_HOME=/usr/local/cuda-11.7 # can replace yours
+export CUDA_HOME=/usr/local/cuda-11 # can replace yours
 
 pip install torch==1.13.1+cu117 torchvision==0.14.1+cu117 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu117
 pip install torch-scatter -f https://data.pyg.org/whl/torch-1.13.1+cu117.html
@@ -10,7 +10,6 @@ pip install mmcv-full==1.5.3 -f https://download.openmmlab.com/mmcv/dist/cu117/t
 pip install mmcv==1.5.3 -f https://download.openmmlab.com/mmcv/dist/cu117/torch1.13/index.html
 
 pip install loguru
-pip install matplotlib
 pip install hydra-core
 pip install omegaconf
 pip install natsort
@@ -28,7 +27,8 @@ pip install mmsegmentation==0.25.0
 pip install mmengine
 pip install ujson
 pip install scikit-image==0.16.2
-
+pip install matplotlib==3.1.3
+pip install numpy==1.19.5
 
 # === Setup checkpoint directory relative to script ===
 set -e  # Exit on error

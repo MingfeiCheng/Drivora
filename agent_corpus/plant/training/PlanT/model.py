@@ -37,6 +37,7 @@ class HFLM(nn.Module):
         self.vocab_size = [2**i for i in precisions]
 
         # model
+        print(f'Loading model from {self.config_net.hf_checkpoint}')
         config = AutoConfig.from_pretrained(
             self.config_net.hf_checkpoint
         )  # load config from hugging face model

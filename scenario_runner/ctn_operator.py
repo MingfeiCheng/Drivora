@@ -1,3 +1,4 @@
+import os
 import time
 import carla
 import docker
@@ -104,21 +105,20 @@ class CtnSimOperator:
     def _start_operation(self, wait_time=5.0, max_wait=60.0):
         # before 0.9.12
         if self.carla_version < OLD_CARLA_VERSION:
-            cmd = f"docker run --privileged --name=\"{self.container_name}\" -d --rm " \
+            cmd = f"docker run --name=\"{self.container_name}\" -d --rm " \
                 f"--runtime=nvidia -e NVIDIA_VISIBLE_DEVICES={self.gpu} " \
                 f"--gpus 'device={self.gpu}' " \
                 f"{self.docker_image} " \
                 f"/bin/bash -c 'SDL_VIDEODRIVER=offscreen CUDA_DEVICE_ORDER=PCI_BUS_ID " \
                 f"CUDA_VISIBLE_DEVICES=0 ./CarlaUE4.sh " \
                 f"-nosound -windowed -opengl " \
-                f"-carla-rpc-port={self.port}'"
+                f"-carla-rpc-port={self.port}'" # remove --privileged 
         else:
-            cmd = f"docker run --privileged --name=\"{self.container_name}\" -d --rm " \
+            cmd = f"docker run --name=\"{self.container_name}\" -d --rm " \
                 f"--runtime=nvidia -e NVIDIA_VISIBLE_DEVICES={self.gpu} " \
                 f"--gpus 'device={self.gpu}' -v /tmp/.X11-unix:/tmp/.X11-unix:rw " \
                 f"{self.docker_image} " \
                 f"/bin/bash ./CarlaUE4.sh -RenderOffScreen"
-                
         
         logger.info(cmd)
         process = subprocess.run(cmd, shell=True)

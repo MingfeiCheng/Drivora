@@ -2,7 +2,7 @@ import os
 import math
 import yaml
 import numpy as np
-import wandb
+# import wandb
 import cv2
 import torch
 import carla
@@ -71,7 +71,7 @@ class LAVAgent(AutonomousAgent):
         self.waypointer = None
         self.planner    = None
 
-        wandb.init(project='lav_eval')
+        # wandb.init(project='lav_eval')
 
         # Setup models
         self.lidar_model = LiDARModel(
@@ -108,6 +108,11 @@ class LAVAgent(AutonomousAgent):
             num_plan_iter=self.num_plan_iter,
         ).to(self.device)
 
+        self.lidar_model_dir = os.path.join(os.path.dirname(__file__), self.lidar_model_dir)
+        self.uniplanner_dir = os.path.join(os.path.dirname(__file__), self.uniplanner_dir)
+        self.bra_model_trace_dir = os.path.join(os.path.dirname(__file__), self.bra_model_trace_dir)
+        self.seg_model_trace_dir = os.path.join(os.path.dirname(__file__), self.seg_model_trace_dir)
+        
         self.bra_model = torch.jit.load(self.bra_model_trace_dir)
         self.seg_model = torch.jit.load(self.seg_model_trace_dir)
 
@@ -154,10 +159,10 @@ class LAVAgent(AutonomousAgent):
 
     def flush_data(self):
 
-        if self.log_wandb:
-            wandb.log({
-                'vid': wandb.Video(np.stack(self.vizs).transpose((0,3,1,2)), fps=20, format='mp4')
-            })
+        # if self.log_wandb:
+        #     wandb.log({
+        #         'vid': wandb.Video(np.stack(self.vizs).transpose((0,3,1,2)), fps=20, format='mp4')
+        #     })
 
         self.vizs.clear()
 
@@ -199,6 +204,8 @@ class LAVAgent(AutonomousAgent):
     @torch.no_grad()
     def run_step(self, input_data, timestamp):
 
+        agent_log = {}
+
         self.num_frames += 1
 
         _, lidar = input_data.get('LIDAR')
@@ -229,7 +236,7 @@ class LAVAgent(AutonomousAgent):
 
         if self.num_frames <= 1:
             self.prev_lidar = lidar
-            return carla.VehicleControl()
+            return carla.VehicleControl(), agent_log
 
 
         if self.prev_lidar is not None:
@@ -352,7 +359,7 @@ class LAVAgent(AutonomousAgent):
         if len(self.vizs) >= 12000:
             self.flush_data()
 
-        return carla.VehicleControl(steer=steer, throttle=throt, brake=brake)
+        return carla.VehicleControl(steer=steer, throttle=throt, brake=brake), agent_log
 
 
     def get_stacked_lidar(self):
@@ -405,7 +412,7 @@ class LAVAgent(AutonomousAgent):
         # desired_speed = np.mean((waypoints[1:]-waypoints[:-1])@[0,1])
         desired_speed = np.linalg.norm(waypoints[1:]-waypoints[:-1], axis=1).mean()
 
-        aim = waypoints[self.aim_point[cmd]]
+        aim = waypoints[self.aim_point]
         angle = np.degrees(np.pi / 2 - np.arctan2(aim[1], aim[0])) / 90
         steer = self.turn_controller.step(angle)
         steer = np.clip(steer, -1.0, 1.0)
@@ -413,7 +420,8 @@ class LAVAgent(AutonomousAgent):
         # steer = steer if desired_speed > self.brake_speed * self.pixels_per_meter * 2 else 0.
 
         brake = desired_speed < self.brake_speed * self.pixels_per_meter
-        delta = np.clip(desired_speed * self.speed_ratio[cmd] - speed, 0.0, self.clip_delta)
+        # delta = np.clip(desired_speed * self.speed_ratio[cmd] - speed, 0.0, self.clip_delta)
+        delta = np.clip(desired_speed - speed, 0.0, self.clip_delta)
         throttle = self.speed_controller.step(delta)
         throttle = np.clip(throttle, 0.0, self.max_throttle)
         throttle = throttle if not brake else 0.0

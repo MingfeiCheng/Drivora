@@ -1,8 +1,8 @@
 import math
 import numpy as np
 
-from agents.navigation.local_planner import RoadOption
-
+# from agents.navigation.local_planner import RoadOption
+from agent_corpus.atomic.navigation.local_planner import RoadOption
 
 class Waypointer:
     

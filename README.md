@@ -179,17 +179,18 @@ Currently, **12 ADSs** are supported, covering **module-based**, **end-to-end**,
 
 | ADS Agent  | ADS Type              | Original Repo                                                                                      | Entry Point                                   | Config Path                                                   |
 |------------|-----------------------|----------------------------------------------------------------------------------------------------|-----------------------------------------------|---------------------------------------------------------------|
-| Pylot      | Module-based          | [erdos-project/pylot](https://github.com/erdos-project/pylot)  |                                                               |
+| Pylot      | Module-based          | [erdos-project/pylot](https://github.com/erdos-project/pylot)  |           release soon     |
+| LAV      | End-to-End            | [LAV](https://github.com/dotchen/LAV) | agent_corpus.lav.lav_agent:LAVAgent | agent_corpus/lav/config_v2.yaml |
 | Roach      | End-to-End            | [carla-roach](https://github.com/zhejz/carla-roach) | agent_corpus.roach.agent:RoachAgent           | agent_corpus/roach/config/config_agent.yaml                   |
-| InterFuser | End-to-End            | [InterFuser](https://github.com/opendilab/InterFuser)   |  agent_corpus.interfuser.interfuser_agent:InterfuserAgent |                                                             |
-| TransFuser | End-to-End            | [transfuser](https://github.com/autonomousvision/transfuser)                                       |     agent_corpus.transfuser.agent:HybridAgent                                            |                                                                     |
-| PlanT      | End-to-End            | [plant](https://github.com/autonomousvision/plant)        |       agent_corpus.plant.PlanT_agent:PlanTPerceptionAgent  |                                                               |
-| TCP        | End-to-End            | [TCP](https://github.com/OpenDriveLab/TCP), [Bench2Drive](https://github.com/Thinklab-SJTU/Bench2Drive/tree/main) |       agent_corpus.tcp_admlp.tcp_b2d_agent:TCPAgent         |                                                               |
-| ADMLP      | End-to-End            | [ADMLP](https://github.com/E2E-AD/AD-MLP), [Bench2Drive](https://github.com/Thinklab-SJTU/Bench2Drive/tree/main) |     agent_corpus.tcp_admlp.admlp_b2d_agent:ADMLPAgent       |                                                               |
-| Uniad      | End-to-End            | [UniAD](https://github.com/OpenDriveLab/UniAD), [Bench2Drive](https://github.com/Thinklab-SJTU/Bench2Drive/tree/main) |     agent_corpus.uniad_vad.uniad_b2d_agent:UniadAgent     |                                                               |
-| VAD        | End-to-End            | [VAD](https://github.com/hustvl/VAD), [Bench2Drive](https://github.com/Thinklab-SJTU/Bench2Drive/tree/main) |    agent_corpus.uniad_vad.vad_b2d_agent:VadAgent      |                             |
+| InterFuser | End-to-End  | [InterFuser](https://github.com/opendilab/InterFuser)   |  agent_corpus.interfuser.interfuser_agent:InterfuserAgent |  agent_corpus/interfuser/interfuser_config.py |
+| TransFuser | End-to-End            | [transfuser](https://github.com/autonomousvision/transfuser)   |     agent_corpus.transfuser.agent:HybridAgent  | agent_corpus/transfuser/model_ckpt/models_2022/transfuser |
+| PlanT      | End-to-End            | [plant](https://github.com/autonomousvision/plant) | agent_corpus.plant.PlanT_agent:PlanTPerceptionAgent  |  agent_corpus/plant/carla_agent_files/config/experiments/PlanTSubmission.yaml |
+| TCP        | End-to-End            | [TCP](https://github.com/OpenDriveLab/TCP), [Bench2Drive](https://github.com/Thinklab-SJTU/Bench2Drive/tree/main) |       agent_corpus.tcp_admlp.tcp_b2d_agent:TCPAgent   |  agent_corpus/tcp_admlp/Bench2DriveZoo/tcp_b2d.ckpt   |
+| ADMLP      | End-to-End            | [ADMLP](https://github.com/E2E-AD/AD-MLP), [Bench2Drive](https://github.com/Thinklab-SJTU/Bench2Drive/tree/main) |     agent_corpus.tcp_admlp.admlp_b2d_agent:ADMLPAgent       |  agent_corpus/tcp_admlp/Bench2DriveZoo/admlp_b2d.ckpt  |
+| Uniad      | End-to-End            | [UniAD](https://github.com/OpenDriveLab/UniAD), [Bench2Drive](https://github.com/Thinklab-SJTU/Bench2Drive/tree/main) |     agent_corpus.uniad_vad.uniad_b2d_agent:UniadAgent     |  agent_corpus/uniad_vad/adzoo/uniad/configs/stage2_e2e/base_e2e_b2d.py+agent_corpus/uniad_vad/Bench2DriveZoo/uniad_base_b2d.pth |
+| VAD        | End-to-End            | [VAD](https://github.com/hustvl/VAD), [Bench2Drive](https://github.com/Thinklab-SJTU/Bench2Drive/tree/main) |    agent_corpus.uniad_vad.vad_b2d_agent:VadAgent      | agent_corpus/uniad_vad/adzoo/vad/configs/VAD/VAD_base_e2e_b2d.py+agent_corpus/uniad_vad/Bench2DriveZoo/vad_b2d_base.pth |
 | Simlingo   | Vision-Language-based | [simlingo](https://github.com/RenzKa/simlingo)                                                     | agent_corpus.simlingo.agent_simlingo:LingoAgent | agent_corpus/simlingo/checkpoint/simlingo/checkpoints/epoch=013.ckpt/pytorch_model.pt |
-| Orion      | Vision-Language-based | [Orion](https://github.com/xiaomi-mlab/Orion)     |        agent_corpus.orion.orion_b2d_agent:OrionAgent   |                                                               |
+| Orion      | Vision-Language-based | [Orion](https://github.com/xiaomi-mlab/Orion)     |        agent_corpus.orion.orion_b2d_agent:OrionAgent   |  will release soon |
 
 📌 See the [Agent Integration Guide](agents/atomic/README.md) for integrating your own ADS.
 
@@ -257,6 +258,14 @@ If you use Drivora in your work, please cite:
 ```
 
 ---
+
+## Acknowledgements
+
+We would like to acknowledge the following open-source projects and communities that our work builds upon:
+
+- All open-source Autonomous Driving Systems (ADSs)
+- [CARLA ScenarioRunner](https://github.com/carla-simulator/scenario_runner)
+- [CARLA Leaderboard](https://github.com/carla-simulator/leaderboard)
 
 ## 📝 License
 

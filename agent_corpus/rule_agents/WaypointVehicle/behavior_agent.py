@@ -15,6 +15,8 @@ from .navigation.behavior_types import Cautious, Aggressive, Normal
 from .navigation.misc import get_speed, positive, is_within_distance, compute_distance
 from .basic_agent import BasicAgent
 
+from scenario_runner.config import GlobalConfig
+
 def get_basic_config():
     return {
         "base_vehicle_threshold": 5.0,
@@ -24,7 +26,7 @@ def get_basic_config():
         "ignore_stop_signs": False,
         "ignore_vehicles": False,
         # controller
-        "dt": 1.0/20.0,
+        "dt": 1.0/float(GlobalConfig.carla_fps),
         "sampling_radius": 2.0,
         "lateral_control_dict": {
             'K_P': 1.2,
@@ -40,7 +42,7 @@ def get_basic_config():
         "max_brake": 1.0,
         "max_steering": 0.8,
         "offset": 0.1,
-        "base_min_distance": 3.0,
+        "base_min_distance": 5.0,
         "follow_speed_limits": False
     }
 
@@ -95,7 +97,7 @@ class BehaviorWaypointAgent(BasicAgent):
         vehicle based on the surrounding world.
         """
         self._speed = get_speed(self._vehicle)
-        self._speed_limit = self._vehicle.get_speed_limit()
+        self._speed_limit = self._vehicle.get_speed_limit() # km/h
         self._local_planner.set_speed(self._speed_limit)
         self._direction = self._local_planner.target_road_option
         if self._direction is None:

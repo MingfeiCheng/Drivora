@@ -33,7 +33,8 @@ try:
     import pygame
 except ImportError:
     raise RuntimeError("cannot import pygame, make sure pygame package is installed")
-
+import os
+os.environ["SDL_VIDEODRIVER"] = "dummy"
 
 SAVE_PATH = os.environ.get("SAVE_PATH", 'eval')
 IMAGENET_DEFAULT_MEAN = (0.485, 0.456, 0.406)
@@ -217,9 +218,13 @@ class InterfuserAgent(AutonomousAgent):
         self.prev_surround_map = None
 
         self.save_path = None
+        
+        SAVE_PATH = os.path.join(self.scenario_dir, 'agent/internal')
+        
         if SAVE_PATH is not None:
             now = datetime.datetime.now()
-            string = pathlib.Path(os.environ["ROUTES"]).stem + "_"
+            # string = pathlib.Path(os.environ["ROUTES"]).stem + "_"
+            string = 'default'
             string += "_".join(
                 map(
                     lambda x: "%02d" % x,
@@ -380,12 +385,15 @@ class InterfuserAgent(AutonomousAgent):
 
     @torch.no_grad()
     def run_step(self, input_data, timestamp):
+        
+        agent_log = {}
+        
         if not self.initialized:
             self._init()
 
         self.step += 1
         if self.step % self.skip_frames != 0 and self.step > 4:
-            return self.prev_control
+            return self.prev_control, agent_log
 
         tick_data = self.tick(input_data)
 
@@ -578,7 +586,7 @@ class InterfuserAgent(AutonomousAgent):
         if SAVE_PATH is not None:
             self.save(tick_data)
 
-        return control
+        return control, agent_log
 
     def save(self, tick_data):
         frame = self.step // self.skip_frames

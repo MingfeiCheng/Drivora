@@ -19,8 +19,17 @@ from .data import lidar_to_histogram_features, draw_target_point, lidar_bev_cam_
 
 from agent_corpus.atomic.base_agent import AutonomousAgent
 
+SAVE_PATH = os.environ.get('SAVE_PATH')
+
+if not SAVE_PATH:
+    SAVE_PATH = None
+else:
+    pathlib.Path(SAVE_PATH).mkdir(parents=True, exist_ok=True)
+
+
 class HybridAgent(AutonomousAgent):
     def setup(self, path_to_conf_file):
+        
         self.config_path = path_to_conf_file
         self.step = -1
         self.initialized = False
@@ -94,6 +103,9 @@ class HybridAgent(AutonomousAgent):
         self.steer_damping = self.config.steer_damping
         self.rgb_back = None #For debugging
 
+        SAVE_PATH = os.path.join(self.scenario_dir, 'agent/internal')
+        if not os.path.exists(SAVE_PATH):
+            os.makedirs(SAVE_PATH)
 
 
     def _init(self):
@@ -150,6 +162,15 @@ class HybridAgent(AutonomousAgent):
                         }
                     ]
 
+        if(SAVE_PATH != None): #Debug camera for visualizations
+            sensors.append({
+                            'type': 'sensor.camera.rgb',
+                            'x': -4.5, 'y': 0.0, 'z':2.3,
+                            'roll': 0.0, 'pitch': -15.0, 'yaw': 0.0,
+                            'width': 960, 'height': 480, 'fov': 100,
+                            'id': 'rgb_back'
+                            })
+            
         if (self.backbone != 'latentTF'):  # LiDAR method
             sensors.append({
                             'type': 'sensor.lidar.ray_cast',
@@ -168,6 +189,10 @@ class HybridAgent(AutonomousAgent):
             rgb_pos = self.scale_crop(Image.fromarray(rgb_pos), self.config.scale, self.config.img_width, self.config.img_width, self.config.img_resolution[0], self.config.img_resolution[0])
             rgb.append(rgb_pos)
         rgb = np.concatenate(rgb, axis=1)
+        
+        if(SAVE_PATH != None): #Debug camera for visualizations
+            # don't need buffer for it always use the latest one
+            self.rgb_back = input_data["rgb_back"][1][:, :, :3]
 
         gps = input_data['gps'][1][:2]
         speed = input_data['speed'][1]['speed']
@@ -210,6 +235,9 @@ class HybridAgent(AutonomousAgent):
 
     @torch.inference_mode() # Faster version of torch_no_grad
     def run_step(self, input_data, timestamp):
+        
+        agent_log = {}
+        
         self.step += 1
 
         if not self.initialized:
@@ -226,7 +254,7 @@ class HybridAgent(AutonomousAgent):
         # repeat actions twice to ensure LiDAR data availability
         if self.step % self.config.action_repeat == 1:
             self.update_gps_buffer(self.control, tick_data['compass'], tick_data['speed'])
-            return self.control
+            return self.control, agent_log
 
         # prepare image input
         image = self.prepare_image(tick_data)
@@ -269,7 +297,7 @@ class HybridAgent(AutonomousAgent):
                 rotated_bb = []
                 if (self.backbone == 'transFuser'):
                     pred_wp, _ = self.nets[i].forward_ego(image, lidar_bev, target_point, target_point_image, velocity,
-                                                          num_points=num_points, save_path=None, stuck_detector=self.stuck_detector,
+                                                          num_points=num_points, save_path=SAVE_PATH, stuck_detector=self.stuck_detector,
                                                           forced_move=is_stuck, debug=self.config.debug, rgb_back=self.rgb_back)
                 elif (self.backbone == 'late_fusion'):
                     pred_wp, _ = self.nets[i].forward_ego(image, lidar_bev, target_point, target_point_image, velocity, num_points=num_points)
@@ -368,7 +396,7 @@ class HybridAgent(AutonomousAgent):
         self.control = control
 
         self.update_gps_buffer(self.control, tick_data['compass'], tick_data['speed'])
-        return control
+        return control, agent_log
 
     def bb_detected_in_front_of_vehicle(self, ego_speed):
         if (len(self.bb_buffer) < 1):  # We only start after we have 4 time steps.

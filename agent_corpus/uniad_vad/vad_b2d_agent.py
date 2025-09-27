@@ -39,6 +39,7 @@ class VadAgent(AutonomousAgent):
         self.pidcontroller = PIDController() 
         self.config_path = path_to_conf_file.split('+')[0]
         self.ckpt_path = path_to_conf_file.split('+')[1]
+        now = datetime.datetime.now()
         if IS_BENCH2DRIVE:
             self.save_name = path_to_conf_file.split('+')[-1]
         else:
@@ -84,11 +85,16 @@ class VadAgent(AutonomousAgent):
         control.brake = 0.0	
         self.prev_control = control
         self.prev_control_cache = []
+        
+        SAVE_PATH = os.path.join(self.scenario_dir, "agent/internal")
+        
         if SAVE_PATH is not None:
             now = datetime.datetime.now()
-            string = pathlib.Path(os.environ['ROUTES']).stem + '_'
+            # string = pathlib.Path(os.environ['ROUTES']).stem + '_'
+            string = ''
             string += self.save_name
-            self.save_path = pathlib.Path(os.environ['SAVE_PATH']) / string
+            # self.save_path = pathlib.Path(os.environ['SAVE_PATH']) / string
+            self.save_path = pathlib.Path(str(SAVE_PATH)) / string
             self.save_path.mkdir(parents=True, exist_ok=False)
             (self.save_path / 'rgb_front').mkdir()
             (self.save_path / 'rgb_front_right').mkdir()
@@ -256,15 +262,15 @@ class VadAgent(AutonomousAgent):
                     'id': 'SPEED'
                 },
             ]
-        if IS_BENCH2DRIVE:
-            sensors += [
-                    {	
-                        'type': 'sensor.camera.rgb',
-                        'x': 0.0, 'y': 0.0, 'z': 50.0,
-                        'roll': 0.0, 'pitch': -90.0, 'yaw': 0.0,
-                        'width': 512, 'height': 512, 'fov': 5 * 10.0,
-                        'id': 'bev'
-                    }]
+        # if IS_BENCH2DRIVE:
+        sensors += [
+                {	
+                    'type': 'sensor.camera.rgb',
+                    'x': 0.0, 'y': 0.0, 'z': 50.0,
+                    'roll': 0.0, 'pitch': -90.0, 'yaw': 0.0,
+                    'width': 512, 'height': 512, 'fov': 5 * 10.0,
+                    'id': 'bev'
+                }]
         return sensors
 
     def tick(self, input_data):
@@ -308,6 +314,8 @@ class VadAgent(AutonomousAgent):
     
     @torch.no_grad()
     def run_step(self, input_data, timestamp):
+        agent_log = {}
+        
         if not self.initialized:
             self._init()
         tick_data = self.tick(input_data)
@@ -354,7 +362,7 @@ class VadAgent(AutonomousAgent):
         else:
             ego_lcf_feat[8] = self.prev_control_cache[0].steer
 
-        command = tick_data['command_near']
+        command = tick_data['command_near'].value
         if command < 0:
             command = 4
         command -= 1
@@ -417,7 +425,7 @@ class VadAgent(AutonomousAgent):
         if len(self.prev_control_cache)==10:
             self.prev_control_cache.pop(0)
         self.prev_control_cache.append(control)
-        return control
+        return control, agent_log
 
 
     def save(self, tick_data):

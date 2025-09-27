@@ -1,4 +1,5 @@
 #!/bin/bash
+
 set -e  # Exit immediately on error
 
 if [ $# -lt 3 ]; then
@@ -42,10 +43,10 @@ if command -v conda >/dev/null 2>&1; then
     else
         if [[ "$CARLA_VERSION" == "0.9.10" || "$CARLA_VERSION" == "0.9.10.1" ]]; then
             echo "[INFO] Creating conda environment '${env_name}' with Python 3.7..."
-            conda create -n "${env_name}" python=3.8 -y
+            conda create -n "${env_name}" python=3.7 -y
         elif [[ "$CARLA_VERSION" == "0.9.12" || "$CARLA_VERSION" > "0.9.12" ]]; then
             echo "[INFO] Creating conda environment '${env_name}' with Python 3.12..."
-            conda create -n "${env_name}" python=3.10 -y
+            conda create -n "${env_name}" python=3.8 -y
         else
             echo "[WARN] Unknown CARLA version ${CARLA_VERSION}, defaulting to Python 3.8..."
             conda create -n "${env_name}" python=3.8 -y
@@ -54,7 +55,7 @@ if command -v conda >/dev/null 2>&1; then
 
     eval "$(conda shell.bash hook)"
     conda activate "${env_name}"
-
+    export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
 else
     echo "[WARN] Conda not found. Falling back to Python venv."
 
@@ -66,18 +67,20 @@ else
     source ".venv/${env_name}/bin/activate"
 fi
 
-# === Install common dependencies ===
-echo "[INFO] Installing common Python dependencies..."
-pip install --upgrade pip
-pip install -r requirements.txt
-
 # === Run ADS-specific installation ===
+pip install --upgrade setuptools==60.2.0
+
 echo "[INFO] Running ADS-specific script: ${ADS_SCRIPT}"
 bash "$ADS_SCRIPT"
 
 # === Run tester-specific installation ===
 echo "[INFO] Running tester-specific script: ${TESTER_SCRIPT}"
 bash "$TESTER_SCRIPT"
+
+# === Install common dependencies ===
+echo "[INFO] Installing common Python dependencies..."
+pip install --upgrade pip
+pip install -r requirements.txt
 
 # === Setup CARLA ===
 echo "[INFO] Pulling CARLA docker image..."

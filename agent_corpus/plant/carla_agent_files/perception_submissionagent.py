@@ -18,15 +18,16 @@ import torch
 from shapely.geometry import Polygon
 from shapely.geometry import Point
 from shapely.geometry import LineString
+from scipy.interpolate import UnivariateSpline
 
-from leaderboard.autoagents import autonomous_agent
+# from leaderboard.autoagents import autonomous_agent
 from training.Perception.model import LidarCenterNet
 from training.Perception.data import lidar_to_histogram_features, draw_target_point
 from training.Perception.config import GlobalConfig
 from carla_agent_files.agent_utils import transfuser_utils
-from scipy.interpolate import UnivariateSpline
 from carla_agent_files.agent_utils.coordinate_utils import normalize_angle
 
+from agent_corpus.atomic.base_agent import AutonomousAgent
 
 DATA_SAVE_PATH = os.environ.get('DATA_SAVE_PATH')
 
@@ -35,7 +36,7 @@ if not DATA_SAVE_PATH:
 else:
     Path(DATA_SAVE_PATH).mkdir(parents=True, exist_ok=True)
 
-class PerceptionAgent(autonomous_agent.AutonomousAgent):
+class PerceptionAgent(AutonomousAgent):
     def setup(self, path_to_conf_file, route_index=None, cfg=None, exec_or_inter=None):
         self.config_path = path_to_conf_file
         self.step = -1

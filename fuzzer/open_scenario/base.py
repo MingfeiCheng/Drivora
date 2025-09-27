@@ -109,7 +109,7 @@ class Fuzzer(object):
             logger.error(f"Please provide a valid agent entry point: {self.agent_entry_point}")
             raise ValueError("Invalid agent entry point.")
         self.agent_config_path = self.agent_config.get('config_path', {}) # can be empty
-        if self.agent_config_path is None or not os.path.isfile(self.agent_config_path):
+        if self.agent_config_path is None:
             logger.error(f"Please provide a valid agent config path: {self.agent_config_path}")
             raise ValueError("Invalid agent config path.")
         

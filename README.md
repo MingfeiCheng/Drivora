@@ -215,9 +215,10 @@ To develop your own **search-based testing methods**, please refer to the provid
 
 ## ✅ TODO
 
-- [ ] Add support for **learning-based testing techniques**  
 - [ ] Provide more detailed **documentation and tutorials**  
-
+- [ ] Release more testing methods
+- [ ] Release more ADSs
+ 
 ## 📬 Contact
 
 We welcome issues, suggestions, and collaboration opportunities.  

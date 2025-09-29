@@ -6,7 +6,7 @@
 <div align="center">
   <h1 align="center">Drivora</h1>
   <p align="center">
-    <b>A Unified and Scalable Infrastructure for Autonomous Driving Testing</b>
+    <b>A Unified and Extensible Infrastructure for Autonomous Driving Testing</b>
   </p>
 </div>
 
@@ -22,7 +22,7 @@ It is designed to support:
 - ⚡ **Distributed and parallel execution** for large-scale testing  
 - 👥 **Multi-agent and multi-vehicle** testing settings  
 
-Drivora enables **scalable, automated, and reproducible evaluation** of ADS safety and reliability across complex driving scenarios.  
+Drivora enables **unified, extensible, and automated testing** of ADS safety and reliability across complex driving scenarios.  
 Its modular design allows researchers to **prototype and extend new testing methods** without dealing with low-level deployment details.
 
 ---
@@ -179,9 +179,8 @@ Currently, **12 ADSs** are supported, covering **module-based**, **end-to-end**,
 
 | ADS Agent  | ADS Type              | Original Repo                                                                                      | Entry Point                                   | Config Path                                                   |
 |------------|-----------------------|----------------------------------------------------------------------------------------------------|-----------------------------------------------|---------------------------------------------------------------|
-| Pylot      | Module-based          | [erdos-project/pylot](https://github.com/erdos-project/pylot)  |           release soon     |
-| LAV      | End-to-End            | [LAV](https://github.com/dotchen/LAV) | agent_corpus.lav.lav_agent:LAVAgent | agent_corpus/lav/config_v2.yaml |
 | Roach      | End-to-End            | [carla-roach](https://github.com/zhejz/carla-roach) | agent_corpus.roach.agent:RoachAgent           | agent_corpus/roach/config/config_agent.yaml                   |
+| LAV      | End-to-End            | [LAV](https://github.com/dotchen/LAV) | agent_corpus.lav.lav_agent:LAVAgent | agent_corpus/lav/config_v2.yaml |
 | InterFuser | End-to-End  | [InterFuser](https://github.com/opendilab/InterFuser)   |  agent_corpus.interfuser.interfuser_agent:InterfuserAgent |  agent_corpus/interfuser/interfuser_config.py |
 | TransFuser | End-to-End            | [transfuser](https://github.com/autonomousvision/transfuser)   |     agent_corpus.transfuser.agent:HybridAgent  | agent_corpus/transfuser/model_ckpt/models_2022/transfuser |
 | PlanT      | End-to-End            | [plant](https://github.com/autonomousvision/plant) | agent_corpus.plant.PlanT_agent:PlanTPerceptionAgent  |  agent_corpus/plant/carla_agent_files/config/experiments/PlanTSubmission.yaml |
@@ -191,7 +190,7 @@ Currently, **12 ADSs** are supported, covering **module-based**, **end-to-end**,
 | VAD        | End-to-End            | [VAD](https://github.com/hustvl/VAD), [Bench2Drive](https://github.com/Thinklab-SJTU/Bench2Drive/tree/main) |    agent_corpus.uniad_vad.vad_b2d_agent:VadAgent      | agent_corpus/uniad_vad/adzoo/vad/configs/VAD/VAD_base_e2e_b2d.py+agent_corpus/uniad_vad/Bench2DriveZoo/vad_b2d_base.pth |
 | Simlingo   | Vision-Language-based | [simlingo](https://github.com/RenzKa/simlingo)                                                     | agent_corpus.simlingo.agent_simlingo:LingoAgent | agent_corpus/simlingo/checkpoint/simlingo/checkpoints/epoch=013.ckpt/pytorch_model.pt |
 | Orion      | Vision-Language-based | [Orion](https://github.com/xiaomi-mlab/Orion)     |        agent_corpus.orion.orion_b2d_agent:OrionAgent   |  will release soon |
-
+| Pylot      | Module-based          | [erdos-project/pylot](https://github.com/erdos-project/pylot)  |           release soon     |
 📌 See the [Agent Integration Guide](agents/atomic/README.md) for integrating your own ADS.
 
 ## 🔬 Fuzzing Tools
@@ -203,6 +202,7 @@ Drivora incorporates multiple fuzzers, each with different scenario definitions,
 - [AVFuzzer](fuzzer/open_scenario/avfuzzer/README.md)  
 - [Behavexplor](fuzzer/open_scenario/behavexplor/README.md)  
 - [SAMOTA](fuzzer/open_scenario/samota/README.md)  
+- [DriveFuzz](fuzzer/open_scenario/drivefuzz/README.md)
 - ... 🔄 more coming soon!
 
 ---

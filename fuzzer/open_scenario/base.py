@@ -1,34 +1,36 @@
 import os
 import json
+import copy
 import queue
 import multiprocessing as mp
 
 from datetime import datetime
 from omegaconf import DictConfig, OmegaConf
 from loguru import logger
-from typing import Dict
-from dataclasses import dataclass
+from typing import Dict, Any
+from dataclasses import dataclass, field, asdict, fields
 
 from scenario_corpus.open_scenario.config import ScenarioConfig
 from scenario_runner.config import GlobalConfig
 from scenario_runner.ctn_manager import create_ctn_manager
 
+from deap import creator
 
 @dataclass
 class FuzzSeed:
     """Data container for fuzzing seeds."""
     id: str
     scenario: ScenarioConfig
-    oracle_result: Dict
-    feedback_result: Dict
-    is_expected: bool
+    oracle_result: Dict[str, Any] = field(default_factory=dict)
+    feedback_result: Dict[str, Any] = field(default_factory=dict)
+    is_expected: bool = False
 
     def set_id(self, new_id: str):
         self.id = new_id
         self.scenario.id = new_id
 
     @classmethod
-    def load_from_scenario_file(cls, config_path: str):
+    def load_from_scenario_file(cls, config_path: str) -> "FuzzSeed":
         """Load the initial seed from the given path"""
         with open(config_path, 'r') as f:
             data = json.load(f)
@@ -36,31 +38,31 @@ class FuzzSeed:
         return cls(
             id="init_seed",
             scenario=scenario,
-            oracle_result={},
-            feedback_result={},
-            is_expected=False,
         )
 
     @classmethod
-    def load_from_dict(cls, data: dict):
-        scenario = ScenarioConfig.model_validate(data['scenario'])
-        return cls(
-            id=data.get("id", "seed"),
-            scenario=scenario,
-            oracle_result=data.get("oracle_result", {}),
-            feedback_result=data.get("feedback_result", {}),
-            is_expected=data.get("is_expected", False),
-        )
+    def load_from_dict(cls, data: dict) -> "FuzzSeed":
+        """Load instance from dict, compatible with subclasses."""
+        init_args = {}
+        for f in fields(cls):
+            if f.name == "scenario":
+                init_args["scenario"] = ScenarioConfig.model_validate(data["scenario"])
+            else:
+                init_args[f.name] = data.get(f.name, getattr(cls, f.name, None))
+        return cls(**init_args)
 
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "scenario": self.scenario.model_dump(),
-            "oracle_result": self.oracle_result,
-            "feedback_result": self.feedback_result,
-            "is_expected": self.is_expected,
-        }
-
+    def to_dict(self) -> dict:
+        """Convert seed to serializable dict (safe for JSON)."""
+        result = asdict(self)
+        result["scenario"] = self.scenario.model_dump()
+        return result
+    
+    def to_deap_args(self) -> dict:
+        """Convert seed to DEAP-compatible args (no nested dataclasses)."""
+        result = asdict(self)
+        result["scenario"] = self.scenario
+        return result
+    
 class Fuzzer(object):
     
     SCENARIO_ENTRY = "scenario_corpus.open_scenario.scenario:OpenScenario"
@@ -300,6 +302,7 @@ class Fuzzer(object):
 
         # Prepare tasks
         for ind_index, ind in enumerate(individuals):
+            
             task = (
                 self.result_folder,
                 {},  # placeholder, can be replaced with ctn_cfg.to_dict() in worker if needed

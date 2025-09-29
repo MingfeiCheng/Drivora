@@ -16,7 +16,7 @@ output_root: ""
 # NOTE: currently, only one carla container is supported, can be extended
 carla:
   image: "carlasim/carla:0.9.10.1"
-  fps: 25
+  fps: 20
   is_sync: true
   random_seed: 42  # random seed for carla server
 

@@ -19,6 +19,7 @@ from .planner import RoutePlanner
 
 from agent_corpus.atomic.navigation.local_planner import RoadOption
 from agent_corpus.atomic.base_agent import AutonomousAgent
+from agent_corpus.atomic.route_manipulation import downsample_route
 
 def get_config_path():
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -89,7 +90,7 @@ class RoachAgent(AutonomousAgent):
         self._active_traffic_light = None
 
     def _init(self):
-        self._global_route = self._global_plan_world_coord # added
+        # self._global_route = self._global_plan_world_coord # added
         
         # logger.debug("global route: {}".format(self._global_route))
         
@@ -122,6 +123,17 @@ class RoachAgent(AutonomousAgent):
 
         logger.info("initialized")
 
+    def set_global_plan(self, global_plan_gps, global_plan_world_coord):
+        """
+        gps_route, route
+        Set the plan (route) for the agent
+        leaderboard 2.0 style
+        """
+        self._global_route = global_plan_world_coord
+        ds_ids = downsample_route(global_plan_world_coord, 200)
+        self._global_plan_world_coord = [(global_plan_world_coord[x][0], global_plan_world_coord[x][1]) for x in ds_ids]
+        self._global_plan = [global_plan_gps[x] for x in ds_ids]
+        
     def _truncate_global_route_till_local_target(self, windows_size=5):
         """
         This function aims to: truncate global route from current location, find future waypoints

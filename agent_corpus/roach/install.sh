@@ -24,5 +24,17 @@ pip install open3d
 pip install filterpy
 pip install opencv-python
 pip install numpy==1.19.1
+pip install gdown
 
+# Ensure the log directory exists
+LOG_DIR="$(dirname "$(realpath "$0")")/log"
+mkdir -p "$LOG_DIR"
+cd "$LOG_DIR" || exit 1
+
+# Google Drive file info
+FILE_ID="1dg_nB8OvB9H-wpcSlpUhXNgrXW8_pPIQ"
+FILE_NAME="ckpt_11833344.pth"
+
+# Download the file (overwrite if exists)
+gdown --id "$FILE_ID" -O "$FILE_NAME"
 

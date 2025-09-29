@@ -1,0 +1,64 @@
+
+# algorithm
+population_size: 2  # population size
+mutation_prob: 0.5
+
+feedback:
+  # feedback config
+  scale_collision: 10.0
+  scale_stuck: 180.0 # can adjust
+  sacle_destination: 20.0
+
+oracle:
+  # oracle config
+  collision_recheck: True
+
+mutator:
+
+  mutation_space:
+    # ========================
+    # Common
+    # ========================
+    MIN_TRIGGER_TIME: 0.0   # seconds
+    MAX_TRIGGER_TIME: 0.0   # seconds
+
+    # ========================
+    # NPC Vehicles
+    # ========================
+    MIN_VEHICLE_NUM: 1
+    MAX_VEHICLE_NUM: 10
+    MIN_VEHICLE_SPEED: 0.0      # m/s
+    MAX_VEHICLE_SPEED: 15.0     # m/s
+    MIN_VEHICLE_ROUTE_LEN: 10   # waypoints
+    MAX_VEHICLE_ROUTE_LEN: 200  # waypoints
+    DELTA_VEHICLE_SPEED: 1.0    # m/s
+
+    # ========================
+    # NPC Walkers
+    # ========================
+    MIN_WALKER_NUM: 0
+    MAX_WALKER_NUM: 20
+
+    # ========================
+    # NPC Statics
+    # ========================
+    MIN_STATIC_NUM: 0
+    MAX_STATIC_NUM: 5
+
+    # ========================
+    # Traffic Lights
+    # ========================
+    MIN_YELLOW_TIME: 1.0   # seconds
+    MAX_YELLOW_TIME: 5.0   # seconds
+    MIN_RED_TIME: 5.0      # seconds
+    MAX_RED_TIME: 20.0     # seconds
+    MIN_GREEN_TIME: 5.0    # seconds
+    MAX_GREEN_TIME: 20.0   # seconds
+
+    # ========================
+    # Relationships
+    # ========================
+    MIN_DISTANCE_BETWEEN_AGENTS: 2.0   # meters
+    MAX_DISTANCE_BETWEEN_AGENTS: 20.0  # meters
+    MIN_START_DISTANCE_FROM_EGO: 5.0  # meters
+    MAX_START_DISTANCE_FROM_EGO: 20.0  # meters

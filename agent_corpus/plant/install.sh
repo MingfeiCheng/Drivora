@@ -27,7 +27,7 @@ pip install torchmetrics==0.7.2
 
 pip install -e "$(dirname "$0")"
 
-# cd "$(dirname "$0")"
+cd "$(dirname "$0")"
 
-# chmod +x download.sh
-# ./download.sh
+chmod +x download.sh
+./download.sh

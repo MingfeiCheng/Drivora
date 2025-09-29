@@ -22,8 +22,8 @@ from .mutator import ScenarioMutator
 from .feedback import FeedbackCalculator
 from .oracle import ScenarioOracle
 
-@FUZZER_REGISTRY.register("fuzzer.open_scenario.random")
-class RandomFuzzer(Fuzzer):
+@FUZZER_REGISTRY.register("fuzzer.open_scenario.avfuzzer")
+class AVFuzzer(Fuzzer):
     
     def __init__(
         self, 
@@ -31,7 +31,7 @@ class RandomFuzzer(Fuzzer):
         agent_config: DictConfig,
         scenario_config: DictConfig
     ):
-        super(RandomFuzzer, self).__init__(
+        super(AVFuzzer, self).__init__(
             fuzzer_config,
             agent_config,
             scenario_config
@@ -50,7 +50,7 @@ class RandomFuzzer(Fuzzer):
         
         ###### The following should be in checkpoint ########
         # 5. pipeline config
-        self.population_size = self.pipeline_config.get('population_size', 1)
+        self.population_size = self.pipeline_config.get('population_size', 4)
         self.mutation_prob = self.pipeline_config.get('mutation_prob', 0.5)
         
         # 6. internal parameters & checkpoint information
@@ -74,15 +74,19 @@ class RandomFuzzer(Fuzzer):
             logger.info("Start from scratch, time counter reset to 0.")    
 
     def setup_deap(self):
+        
         self.toolbox = base.Toolbox()
         if not hasattr(creator, "FitnessMin"):
-            creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
+            creator.create("FitnessMin", base.Fitness, weights=(-1.0,)) # min is better
+            
         if not hasattr(creator, "Individual"):
             creator.create("Individual", FuzzSeed, fitness=creator.FitnessMin)
-            
+        
+        self.toolbox.register("mutate_resample", self.mutate_resample)
         self.toolbox.register("evaluate", self.evaluate)
         self.toolbox.register("mutate", self.mutation)
-        self.toolbox.register("select", tools.selRandom) # random
+        self.toolbox.register("crossover", self.crossover) # random
+        self.toolbox.register("select", tools.selTournament) # to
         
         # setup parallel pool
         self.parallel_num = GlobalConfig.parallel_num
@@ -149,8 +153,7 @@ class RandomFuzzer(Fuzzer):
                 'F_size': len(self.F_corpus),
                 'time_budget_hours': self.time_budget,
                 'time_used_hours': (self.time_counter / 3600.0 if self.time_budget is not None else None),
-                'best_score': self.best_score,
-                'F_corpus': self.F_corpus
+                'best_score': self.best_score
             },
             'details': {
             }
@@ -168,6 +171,10 @@ class RandomFuzzer(Fuzzer):
         overview_res_file = os.path.join(self.output_root, 'overview.json')
         with open(overview_res_file, 'w') as f:
             json.dump(overview_res, f, indent=4)
+            
+    def crossover(self, ind1: FuzzSeed, ind2: FuzzSeed) -> (FuzzSeed, FuzzSeed):
+        # not used in current fuzzer
+        return ind1, ind2
     
     def mutation(self, source_seed: FuzzSeed) -> FuzzSeed:
         # this should be in the logical scenario space
@@ -193,7 +200,7 @@ class RandomFuzzer(Fuzzer):
             ego_config_path=self.agent_config_path
         )       
         self.ctn_manager.release(ctn_config) 
-        return (op_seed,)
+        return op_seed
 
     def evaluate(self, individuals: list):
         """
@@ -227,7 +234,6 @@ class RandomFuzzer(Fuzzer):
             
             ind.oracle_result = oracle_result
             ind.is_expected = oracle_result['expected']
-            
             ind.feedback_result = feedback_result
 
             # Example: use feedback score as fitness
@@ -256,6 +262,18 @@ class RandomFuzzer(Fuzzer):
             individuals[ind_index] = ind
 
         return individuals
+    
+    def restart_ga_seed(self):
+        self.generation_step += 1
+        ind_id = f'gen_{self.generation_step}_initial'
+        
+        ind = creator.Individual(
+            **self.initial_seed.to_deap_args()
+        )
+        ind.set_id(ind_id)
+        ind, = self.toolbox.mutate_resample(ind)
+        del ind.fitness.values
+        return ind
 
     def run(self):
         start_time = datetime.now()
@@ -288,7 +306,7 @@ class RandomFuzzer(Fuzzer):
                 self.pop.append(ind)
 
         # evaluate the initial population
-        self.pop = self.toolbox.evaluate(self.pop)
+        self.pop = self.evaluate(self.pop)
         self.save_checkpoint()
 
         # ========== GA loop ==========
@@ -316,7 +334,7 @@ class RandomFuzzer(Fuzzer):
             # evaluation
             uneval_ind = [ind for ind in offspring if not ind.fitness.valid]
             if uneval_ind:
-                uneval_ind = self.toolbox.evaluate(uneval_ind)
+                uneval_ind = self.evaluate(uneval_ind)
 
             # update population
             self.pop[:] = offspring

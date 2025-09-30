@@ -75,6 +75,9 @@ class RandomFuzzer(Fuzzer):
             self.time_counter = 0.0
             logger.info("Start from scratch, time counter reset to 0.")    
 
+        # 9. setup deap toolbox
+        self.setup_deap()
+        
     def setup_deap(self):
         
         self.toolbox = base.Toolbox()
@@ -97,7 +100,17 @@ class RandomFuzzer(Fuzzer):
             self.toolbox.register("map", map)
             self.pool = None
             logger.info("Sequential evaluation (parallel_num=1).")
-    
+
+        if len(self.pop) > 0:
+            if not isinstance(self.pop[0], creator.Individual):
+                ind_pop = [
+                    creator.Individual(
+                        **seed.to_deap_args()
+                    ) for seed in self.pop
+                ]
+                self.pop = ind_pop
+                
+                
     def close(self):
         if self.pool is not None:
             self.pool.close()
@@ -113,13 +126,8 @@ class RandomFuzzer(Fuzzer):
             self.seed_recorder = checkpoint_data['seed_recorder']
             self.F_corpus = checkpoint_data['F_corpus']
             self.best_score = checkpoint_data['best_score']
-            _pop = [
-                FuzzSeed.load_from_dict(seed_dict) for seed_dict in checkpoint_data['pop']
-            ]
             self.pop = [
-                creator.Individual(
-                    **seed.to_deap_args()
-                ) for seed in _pop
+                FuzzSeed.load_from_dict(seed_dict) for seed_dict in checkpoint_data['pop']
             ]
             self.initial_seed = FuzzSeed.load_from_dict(checkpoint_data['initial_seed'])
             
@@ -220,12 +228,12 @@ class RandomFuzzer(Fuzzer):
         # Run execution in parallel (container + scenario simulation)
         exec_results = self.execute_population(individuals)
 
-        original_num = len(individuals)
         for ind_index, scenario_exec_status, scenario_dir in exec_results:
             # Evaluate oracle and feedback on the produced scenario
             
             if not scenario_exec_status:
                 # has error of this execution
+                # no update this individual
                 continue
             
             visualize_trajectories(scenario_dir)
@@ -273,14 +281,6 @@ class RandomFuzzer(Fuzzer):
             
             individuals[ind_index] = ind
 
-        if len(individuals) < original_num:
-            logger.warning(f"Some individuals failed during execution, {len(individuals)}/{original_num} left after evaluation.")
-            # extend the individuals list to match original length
-            while len(individuals) < original_num:
-                # NOTE: if all failed, I think there are critial errors, should exit
-                dummy_ind = copy.deepcopy(individuals[0])
-                individuals.append(dummy_ind)
-                
         return individuals
 
     def run(self):

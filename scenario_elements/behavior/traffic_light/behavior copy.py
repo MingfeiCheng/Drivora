@@ -6,45 +6,22 @@ from loguru import logger
 
 from tools.timer import GameTime
 from pydantic import BaseModel, Field
-from typing import Optional, List
-try:
-    from typing import Literal  # Python ≥3.8
-except ImportError:
-    from typing_extensions import Literal  # Python 3.7
+from typing import Optional
 
 from ..atomic import AtomicBehavior
 
 class TrafficLightBehaviorConfig(BaseModel):
-    pattern: Optional[
-        Literal["none", "S7left", "S7right", "S7opposite", "S8left", "S9right"]
-    ] = Field(
-        None,
-        description=(
-            "Traffic light subtype (intersection configuration).\n"
-            "- none: Always green (no control).\n"
-            "- S7left: Intersection type S7, priority order = ['left', 'opposite', 'right'].\n"
-            "- S7right: Intersection type S7, priority order = ['left', 'opposite'].\n"
-            "- S7opposite: Intersection type S7, priority order = ['right', 'left', 'opposite'].\n"
-            "- S8left: Intersection type S8, priority order = ['opposite'].\n"
-            "- S9right: Intersection type S9, priority order = ['left', 'opposite']."
-        ),
-    )
     yellow_time: float = Field(..., gt=0, description="Duration of yellow light (seconds)")
     red_time: float = Field(..., gt=0, description="Duration of red light (seconds)")
     green_time: Optional[float] = Field(
         None, gt=0, description="Duration of green light (seconds). If None, always green."
     )
 
-    def priority_order(self) -> Optional[List[str]]:
-        """Return the direction priority list for the given pattern."""
-        SUBTYPE_CONFIG_TRANSLATION = {
-            "S7left":     ["left", "opposite", "right"],
-            "S7right":    ["left", "opposite"],
-            "S7opposite": ["right", "left", "opposite"],
-            "S8left":     ["opposite"],
-            "S9right":    ["left", "opposite"],
-        }
-        return SUBTYPE_CONFIG_TRANSLATION.get(self.pattern, None)
+    def cycle_length(self) -> float:
+        """Return total cycle length"""
+        if self.green_time is None:
+            return self.red_time + self.yellow_time  # Always green if green_time not set
+        return self.red_time + self.yellow_time + self.green_time
 
 
 class TrafficLightBehavior(AtomicBehavior):

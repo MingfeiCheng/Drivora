@@ -96,7 +96,8 @@ class FeedbackCalculator:
         
         destination_feedback = 1 - float(np.clip(max_distance_to_destination / self.scale_destination, 0, 1)) # min is better
         
-        score = (collision_feedback + stuck_feedback + destination_feedback) / 3.0
+        # score = (collision_feedback + stuck_feedback + destination_feedback) / 3.0
+        score = collision_feedback
         
         return {
             "score": score,  # Example score

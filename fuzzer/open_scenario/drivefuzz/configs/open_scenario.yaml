@@ -1,15 +1,18 @@
 
 # algorithm
-population_size: 2  # population size
-tournsize: 2
-mutation_prob: 0.5
-crossover_prob: 0.5
+initial_corpus_size: 2  # population size
 
 feedback:
   # feedback config
   scale_collision: 10.0
   scale_stuck: 180.0 # can adjust
   sacle_destination: 20.0
+  # coverage
+  coverage_step: 2
+  coverage_cluster_num: 50
+  coverage_window_size: 10
+  coverage_threshold: 0.4
+  coverage_dynamic_threshold: false
 
 oracle:
   # oracle config

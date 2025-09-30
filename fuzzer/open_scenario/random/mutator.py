@@ -73,7 +73,7 @@ class ScenarioSpace:
 
     
     # traffic light
-    TRAFFIC_LIGHT_PATTERN = ['none', 'S7left', 'S7right', 'S7opposite', 'S8left', 'S9right']
+    TRAFFIC_LIGHT_PATTERN = ['none', 'rule']
     MIN_YELLOW_TIME = 1.0  # seconds
     MAX_YELLOW_TIME = 5.0  # seconds
     MIN_RED_TIME = 5.0  # seconds

@@ -6,7 +6,7 @@ Different scenario templates may require different compatible implementations. T
 
 ### OpenScenario
 
-Below is a brief description of the implemented ADS fuzzing techniques.
+Below is a brief description of the implemented ADS fuzzing techniques. This section is continuously being refined, and contributions are always welcome. 
 
 #### Single-ADS Testing
 

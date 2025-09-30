@@ -160,7 +160,6 @@ class Fuzzer(object):
         
         # 5. setup toolbox
         self.toolbox = None
-        self.setup_deap()
         
     def setup_deap(self):
         raise NotImplementedError("Method setup_deap not implemented")

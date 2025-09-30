@@ -5,7 +5,7 @@ set -euo pipefail
 export CUDA_VISIBLE_DEVICES=2,3 
 
 # ==== Common Config ====
-output_root="results"
+output_root="results_debug"
 run_index=1
 max_sim_time=600.0
 open_vis=true

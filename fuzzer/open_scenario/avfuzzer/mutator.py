@@ -25,7 +25,7 @@ except ModuleNotFoundError:
 OLD_CARLA_VERSION = Version("0.9.12")
 
 from omegaconf import DictConfig
-from typing import List
+from typing import List, Tuple
 from loguru import logger
 
 from scenario_corpus.open_scenario.config import Waypoint, WaypointVehicleConfig, AIWalkerConfig, TrafficLightBehaviorConfig, WeatherConfig, StaticObstacleConfig
@@ -73,7 +73,7 @@ class ScenarioSpace:
 
     
     # traffic light
-    TRAFFIC_LIGHT_PATTERN = ['none', 'S7left', 'S7right', 'S7opposite', 'S8left', 'S9right']
+    TRAFFIC_LIGHT_PATTERN = ['none', 'rule']
     MIN_YELLOW_TIME = 1.0  # seconds
     MAX_YELLOW_TIME = 5.0  # seconds
     MIN_RED_TIME = 5.0  # seconds
@@ -276,16 +276,15 @@ class ScenarioMutator:
                 break
             wp = random.choice(next_wps)
 
-        # 如果不允许终点在 junction，且最后一个点是 junction，就往前继续走
         if not_junction and route and route[-1].is_junction:
-            for _ in range(5):  # 最多尝试 5 步往前找非 junction 点
+            for _ in range(5): 
                 next_wps = wp.next(step_dist)
                 if not next_wps:
                     break
                 wp = random.choice(next_wps)
                 route.append(wp)
                 if not wp.is_junction:
-                    break  # 找到非路口点就停
+                    break 
         return route
 
     def reverse_follow_lane(
@@ -326,12 +325,13 @@ class ScenarioMutator:
         filtered.append(route[-1])  # keep last
         return filtered
 
+    # large mutation
     def sample_npc_route(
         self,
         sample_num: int = 1,
         spawn_points: List[Waypoint] = [],
         ego_start_wps: List[Waypoint] = [],
-    ) -> List[dict]:
+    ) -> List[List[Waypoint]]:
                 
         # filter too far spawn points
         valid_spawn_points = []
@@ -341,7 +341,13 @@ class ScenarioMutator:
             for ego_wp in ego_start_wps:
                 ego_loc = [ego_wp.transform.location.x, ego_wp.transform.location.y, ego_wp.transform.location.z]
                 dist = np.linalg.norm(np.array(sp_loc) - np.array(ego_loc))
-                if dist < ScenarioSpace.MIN_START_DISTANCE_FROM_EGO or dist > ScenarioSpace.MAX_START_DISTANCE_FROM_EGO:
+                
+                if sp.lane_id == ego_wp.lane_id and sp.section_id == ego_wp.section_id and sp.road_id == ego_wp.road_id:
+                    if dist < ScenarioSpace.MIN_START_DISTANCE_FROM_EGO:
+                        is_valid = False
+                        break
+                
+                if dist > ScenarioSpace.MAX_START_DISTANCE_FROM_EGO:
                     is_valid = False
                     break
                 
@@ -396,18 +402,7 @@ class ScenarioMutator:
                         road_option=wp_pair[1].name
                     )
                 )
-                # final_route.append(
-                #     {
-                #         'x': wp_pair[0].location.x,
-                #         'y': wp_pair[0].location.y,
-                #         'z': wp_pair[0].location.z,
-                #         'pitch': wp_pair[0].rotation.pitch,
-                #         'yaw': wp_pair[0].rotation.yaw,
-                #         'roll': wp_pair[0].rotation.roll,
-                #         'speed': float(target_speed),
-                #         'road_option': wp_pair[1].name
-                #     }
-                # )
+                
                 prev_speed = target_speed
             
             npc_routes.append(final_route)
@@ -416,16 +411,104 @@ class ScenarioMutator:
     def sample_walker_route(
         self,
         sample_num: int = 1,
-        spawn_points: List[Waypoint] = [],
-    ):
-        pass
+        spawn_region_x: List[float] = [],
+        spawn_region_y: List[float] = [],
+    ) -> List[List[Waypoint]]:
+        
+        npc_routes = []
+        max_tries = self.MAX_RETRY * sample_num
+        tries = 0
+                
+        while len(npc_routes) < sample_num and tries < max_tries:
+            tries += 1
+            
+            # start point
+            x1 = random.uniform(spawn_region_x[0], spawn_region_x[1])
+            y1 = random.uniform(spawn_region_y[0], spawn_region_y[1])
+            loc1 = carla.Location(x=x1, y=y1, z=0.1)
+
+            wp_start = self._map.get_waypoint(
+                loc1,
+                project_to_road=True,
+                lane_type=(carla.LaneType.Sidewalk | carla.LaneType.Shoulder | carla.LaneType.Parking),
+            )
+
+            if wp_start is None:
+                continue
+                
+            
+            # end point
+            x2 = random.uniform(spawn_region_x[0], spawn_region_x[1])
+            y2 = random.uniform(spawn_region_y[0], spawn_region_y[1])
+            loc2 = carla.Location(x=x2, y=y2, z=0.1)
+
+            wp_end = self._map.get_waypoint(
+                loc2,
+                project_to_road=True,
+                lane_type=(carla.LaneType.Sidewalk | carla.LaneType.Shoulder | carla.LaneType.Parking),
+            )
+
+            if wp_end is None:
+                continue
+       
+            final_route = list()
+            for wp in [wp_start, wp_end]:
+                final_route.append(
+                    Waypoint(
+                        x=wp.transform.location.x,
+                        y=wp.transform.location.y,
+                        z=wp.transform.location.z,
+                        pitch=wp.transform.rotation.pitch,
+                        yaw=wp.transform.rotation.yaw,
+                        roll=wp.transform.rotation.roll,
+                        speed=0.0,
+                        road_option="NONE"
+                    )
+                )            
+            npc_routes.append(final_route)
+        return npc_routes
     
     def sample_static_location(
         self,
         sample_num: int = 1,
-        spawn_points: List[Waypoint] = [],
-    ):
-        pass
+        spawn_region_x: List[float] = [],
+        spawn_region_y: List[float] = [],
+    ) -> List[Waypoint]:
+        
+        npc_locations = []
+        max_tries = self.MAX_RETRY * sample_num
+        tries = 0
+                
+        while len(npc_locations) < sample_num and tries < max_tries:
+            tries += 1
+            
+            # location point
+            x = random.uniform(spawn_region_x[0], spawn_region_x[1])
+            y = random.uniform(spawn_region_y[0], spawn_region_y[1])
+            loc = carla.Location(x=x, y=y, z=0.1)
+
+            wp = self._map.get_waypoint(
+                loc,
+                project_to_road=True,
+                lane_type=(carla.LaneType.Sidewalk | carla.LaneType.Shoulder | carla.LaneType.Parking | carla.LaneType.Driving),
+            )
+
+            if wp is None:
+                continue
+                
+            npc_locations.append(
+                Waypoint(
+                    x=wp.transform.location.x,
+                    y=wp.transform.location.y,
+                    z=wp.transform.location.z,
+                    pitch=wp.transform.rotation.pitch,
+                    yaw=wp.transform.rotation.yaw,
+                    roll=wp.transform.rotation.roll,
+                    speed=0.0,
+                    road_option="NONE"
+                )
+            )
+        return npc_locations
     
     # Weather Tool
     def sample_weather(
@@ -501,11 +584,9 @@ class ScenarioMutator:
                 logger.error(traceback.print_exc())
                 return None
         
-        
         # get spawn points
-        all_waypoints = self._map.generate_waypoints(2.0)
+        all_waypoints = self._map.generate_waypoints(1.0)
         driving_waypoints = []
-        walker_waypoints = []
         for wp in all_waypoints:
             
             if wp.transform.location.x < map_region_min_x or wp.transform.location.x > map_region_max_x \
@@ -515,14 +596,7 @@ class ScenarioMutator:
             if wp.lane_type == carla.LaneType.Driving and (not wp.is_junction):
                 driving_waypoints.append(wp)
                 
-            right_lane_wp = wp.get_right_lane()
-            # NOTE: we do not remove repeated ones, as we do not have too many spawn points
-            if right_lane_wp and right_lane_wp.lane_type == carla.LaneType.Sidewalk:
-                walker_waypoints.append(right_lane_wp)
-                
-            left_lane_wp = wp.get_left_lane()
-            if left_lane_wp and left_lane_wp.lane_type == carla.LaneType.Sidewalk:
-                walker_waypoints.append(left_lane_wp)
+        logger.info(f"Found {len(driving_waypoints)} driving spawn points")
         
         # update ego configs
         ego_configs = mutated_scenario.ego_vehicles
@@ -562,31 +636,28 @@ class ScenarioMutator:
         
             
         # sample NPC vehicles
+        npc_vehicles = []            
+        npc_routes = self.sample_npc_route(
+            sample_num=random.randint(ScenarioSpace.MIN_VEHICLE_NUM, ScenarioSpace.MAX_VEHICLE_NUM),
+            spawn_points=driving_waypoints,
+            ego_start_wps=ego_waypoints
+        )
+        
         npc_vehicles = []
-        for _ in range(self.MAX_RETRY):
-            
-            npc_routes = self.sample_npc_route(
-                sample_num=random.randint(ScenarioSpace.MIN_VEHICLE_NUM, ScenarioSpace.MAX_VEHICLE_NUM),
-                spawn_points=driving_waypoints,
-                ego_start_wps=ego_waypoints
+        for i in range(len(npc_routes)):
+            npc_blueprint = random.choice(self._world.get_blueprint_library().filter('vehicle.*'))
+            npc_config = WaypointVehicleConfig(
+                id=f"npc_vehicle_{i}",
+                model=npc_blueprint.id,
+                rolename="npc_vehicle",
+                color=None,
+                category="vehicle",
+                route=npc_routes[i],
+                trigger_time=float(random.uniform(ScenarioSpace.MIN_TRIGGER_TIME, ScenarioSpace.MAX_TRIGGER_TIME)),
             )
-            
-            npc_vehicles = []
-            for i in range(len(npc_routes)):
-                npc_blueprint = random.choice(self._world.get_blueprint_library().filter('vehicle.*'))
-                npc_config = WaypointVehicleConfig(
-                    id=f"npc_vehicle_{i}",
-                    model=npc_blueprint.id,
-                    rolename="npc_vehicle",
-                    color=None,
-                    category="vehicle",
-                    route=npc_routes[i],
-                    trigger_time=float(random.uniform(ScenarioSpace.MIN_TRIGGER_TIME, ScenarioSpace.MAX_TRIGGER_TIME)),
-                )
-                npc_vehicles.append(npc_config)
-                
+                        
             # checker
-            checking_actors = [
+            checking_actor = [
                 {
                     'model': npc_config.model,
                     'x': npc_config.route[0].x,
@@ -595,35 +666,99 @@ class ScenarioMutator:
                     'pitch': npc_config.route[0].pitch,
                     'yaw': npc_config.route[0].yaw,
                     'roll': npc_config.route[0].roll
-                } for npc_config in npc_vehicles
+                }
             ]
             check_pass = self._location_check(
-                agents_info=existing_actor_info + checking_actors
+                agents_info=existing_actor_info + checking_actor
             )
+            
             if check_pass:
-                break
-        
-        # update existing actor info
-        existing_actor_info.extend(
-            [
-                {
-                    'model': npc_config.model,
-                    'x': npc_config.route[0].x,
-                    'y': npc_config.route[0].y,
-                    'z': npc_config.route[0].z,
-                    'pitch': npc_config.route[0].pitch,
-                    'yaw': npc_config.route[0].yaw,
-                    'roll': npc_config.route[0].roll
-                } for npc_config in npc_vehicles
-            ]
-        )
+                npc_vehicles.append(npc_config)
+                # update existing actor info
+                existing_actor_info.extend(checking_actor)
+                
+        logger.info(f"Sampled {len(npc_routes)} NPC vehicles, actual added {len(npc_vehicles)}.")
             
         # sample NPC walkers
         npc_walkers = [] # to be filled
+        npc_routes = self.sample_walker_route(
+            sample_num=random.randint(ScenarioSpace.MIN_WALKER_NUM, ScenarioSpace.MAX_WALKER_NUM),
+            spawn_region_x=[map_region_min_x, map_region_max_x],
+            spawn_region_y=[map_region_min_y, map_region_max_y],
+        )
+        for i in range(len(npc_routes)):
+            npc_blueprint = random.choice(self._world.get_blueprint_library().filter('walker.pedestrian.*'))
+            npc_config = AIWalkerConfig(
+                id=f"npc_walker_{i}",
+                model=npc_blueprint.id,
+                rolename="npc_walker",
+                category="walker",
+                route=npc_routes[i],
+                trigger_time=float(random.uniform(ScenarioSpace.MIN_TRIGGER_TIME, ScenarioSpace.MAX_TRIGGER_TIME)),
+            )
+                        
+            # checker
+            checking_actor = [
+                {
+                    'model': npc_config.model,
+                    'x': npc_config.route[0].x,
+                    'y': npc_config.route[0].y,
+                    'z': npc_config.route[0].z,
+                    'pitch': npc_config.route[0].pitch,
+                    'yaw': npc_config.route[0].yaw,
+                    'roll': npc_config.route[0].roll
+                }
+            ]
+            check_pass = self._location_check(
+                agents_info=existing_actor_info + checking_actor
+            )
+            if check_pass:
+                npc_walkers.append(npc_config)
+                # update existing actor info
+                existing_actor_info.extend(checking_actor)
+        
+        logger.info(f"Sampled {len(npc_routes)} NPC walkers, actual added {len(npc_walkers)}.")
         
         # sample NPC statics
-        npc_statics = [] # to be filled
+        npc_statics = [] # to be filled      
+        static_locations = self.sample_static_location(
+            sample_num=random.randint(ScenarioSpace.MIN_STATIC_NUM, ScenarioSpace.MAX_STATIC_NUM),
+            spawn_region_x=[map_region_min_x, map_region_max_x],
+            spawn_region_y=[map_region_min_y, map_region_max_y]
+        )
         
+        for i in range(len(static_locations)):
+            static_blueprint = random.choice(self._world.get_blueprint_library().filter('static.prop.*'))
+            static_config = StaticObstacleConfig(
+                id=f"npc_static_{i}",
+                model=static_blueprint.id,
+                rolename="npc_static",
+                category="static",
+                location=static_locations[i],
+            )
+            
+            # checker
+            checking_actor = [
+                {
+                    'model': static_config.model,
+                    'x': static_config.location.x,
+                    'y': static_config.location.y,
+                    'z': static_config.location.z,
+                    'pitch': static_config.location.pitch,
+                    'yaw': static_config.location.yaw,
+                    'roll': static_config.location.roll
+                }
+            ]
+            check_pass = self._location_check(
+                agents_info=existing_actor_info + checking_actor
+            )
+            if check_pass:
+                npc_statics.append(static_config)
+                # update existing actor info
+                existing_actor_info.extend(checking_actor)
+                
+        logger.info(f"Sampled {len(static_locations)} NPC statics, actual added {len(npc_statics)}.")
+    
         # sample weather
         weather = self.sample_weather()
         
@@ -641,3 +776,285 @@ class ScenarioMutator:
         
         self._cleanup()
         return mutated_seed
+    
+    # small mutation
+    def perturb_npc(
+        self,
+        npc_vehicles: List[WaypointVehicleConfig],
+    ):
+        # add small perturbations to existing npc vehicles
+        # generate first, if not ok, do not replace
+        new_npc_vehicles = copy.deepcopy(npc_vehicles)
+        for i in range(len(new_npc_vehicles)):
+            # perturb speed
+            for j in range(len(new_npc_vehicles[i].route)):
+                delta_speed = np.clip(
+                    ScenarioSpace.DELTA_VEHICLE_SPEED * random.uniform(-1, 1),
+                    0.0, ScenarioSpace.DELTA_VEHICLE_SPEED
+                )
+                
+                target_speed = np.clip(
+                    new_npc_vehicles[i].route[j].speed + delta_speed,
+                    ScenarioSpace.MIN_VEHICLE_SPEED, ScenarioSpace.MAX_VEHICLE_SPEED
+                )
+                
+                new_npc_vehicles[i].route[j].speed = float(target_speed)
+        return new_npc_vehicles
+    
+    def perturb_walker(
+        self,
+        npc_walkers: List[AIWalkerConfig],
+        region_x: List[float],
+        region_y: List[float],
+    ):
+        # add small perturbations on existing npc walkers with small position noise
+        # TODO: some may go out of region, but should be ok, may need wp checker
+        new_npc_walkers = copy.deepcopy(npc_walkers)
+        for i in range(len(new_npc_walkers)):
+            # perturb start point a bit
+            new_npc_walkers[i].route[0].x += random.uniform(-1.0, 1.0)
+            new_npc_walkers[i].route[0].y += random.uniform(-1.0, 1.0)
+            new_npc_walkers[i].route[0].x = np.clip(new_npc_walkers[i].route[0].x, region_x[0], region_x[1])
+            new_npc_walkers[i].route[0].y = np.clip(new_npc_walkers[i].route[0].y, region_y[0], region_y[1])
+            
+            # perturb end point a bit
+            new_npc_walkers[i].route[-1].x += random.uniform(-1.0, 1.0)
+            new_npc_walkers[i].route[-1].y += random.uniform(-1.0, 1.0)
+            new_npc_walkers[i].route[-1].x = np.clip(new_npc_walkers[i].route[-1].x, region_x[0], region_x[1])
+            new_npc_walkers[i].route[-1].y = np.clip(new_npc_walkers[i].route[-1].y, region_y[0], region_y[1])
+        return new_npc_walkers
+    
+    def perturb_static(
+        self,
+        npc_statics: List[StaticObstacleConfig],
+        retion_x: List[float],
+        region_y: List[float],
+    ):
+        # add small perturbations on existing npc statics with small position noise
+        # TODO: same as walker, may need checker
+        new_npc_statics = copy.deepcopy(npc_statics)
+        for i in range(len(new_npc_statics)):
+            # perturb location a bit
+            new_npc_statics[i].location.x += random.uniform(-1.0, 1.0)
+            new_npc_statics[i].location.y += random.uniform(-1.0, 1.0)
+            new_npc_statics[i].location.x = np.clip(new_npc_statics[i].location.x, retion_x[0], retion_x[1])
+            new_npc_statics[i].location.y = np.clip(new_npc_statics[i].location.y, region_y[0], region_y[1])
+        return new_npc_statics
+    
+    def perturb_weather(self, weather: WeatherConfig):
+        mutated_weather = copy.deepcopy(weather)
+        # perturb each param a bit
+        def gaussian_perturb(value, low, high, sigma=0.1):
+            new_value = value + random.gauss(0, sigma * (high - low))
+            new_value = np.clip(new_value, low, high)
+            return float(new_value)     
+        
+        for key in ScenarioSpace.WEATHER_SPACE.keys():
+            low, high = ScenarioSpace.WEATHER_SPACE[key]
+            cur_value = getattr(mutated_weather, key)
+            new_value = gaussian_perturb(cur_value, low, high, sigma=0.1)
+            setattr(mutated_weather, key, new_value) 
+            
+        return mutated_weather
+    
+    def perturb_traffic_light(self, traffic_light: TrafficLightBehaviorConfig):
+        # perturb traffic light timings a bit
+        mutated_traffic_light = copy.deepcopy(traffic_light)
+        # gaussian perturb
+        def gaussian_perturb(value, low, high, sigma=0.1):
+            new_value = value + random.gauss(0, sigma * (high - low))
+            new_value = np.clip(new_value, low, high)
+            return float(new_value)
+        
+        mutated_traffic_light.green_time = gaussian_perturb(
+            mutated_traffic_light.green_time,
+            ScenarioSpace.MIN_GREEN_TIME,
+            ScenarioSpace.MAX_GREEN_TIME,
+            sigma=0.1
+        )
+        mutated_traffic_light.yellow_time = gaussian_perturb(
+            mutated_traffic_light.yellow_time,
+            ScenarioSpace.MIN_YELLOW_TIME,
+            ScenarioSpace.MAX_YELLOW_TIME,
+            sigma=0.1
+        )
+        mutated_traffic_light.red_time = gaussian_perturb(
+            mutated_traffic_light.red_time,
+            ScenarioSpace.MIN_RED_TIME,
+            ScenarioSpace.MAX_RED_TIME,
+            sigma=0.1
+        )
+        return mutated_traffic_light
+    
+    def perturb_scenario(
+        self,
+        source_seed: FuzzSeed,
+        ctn_operator: CtnSimOperator
+    ) -> FuzzSeed:
+        # We currently implement a simple mutation strategies
+        
+        mutated_seed = copy.deepcopy(source_seed)
+        mutated_scenario = mutated_seed.scenario
+        
+        # setup ctn
+        self.ctn_operator = ctn_operator
+        map_region = mutated_scenario.map_region
+        map_region_min_x = map_region.region[0]
+        map_region_max_x = map_region.region[1]
+        map_region_min_y = map_region.region[2]
+        map_region_max_y = map_region.region[3]
+
+        # load town & info
+        try:
+            self._setup(map_region.town)
+        except Exception as e:
+            self.ctn_operator.start()
+            try:
+                self._setup(map_region.town)
+            except Exception as e:
+                logger.error(traceback.print_exc())
+                return None
+        
+        # perturb npc vehicles
+        if len(mutated_scenario.npc_vehicles) > 0:
+            mutated_scenario.npc_vehicles = self.perturb_npc(
+                npc_vehicles=mutated_scenario.npc_vehicles
+            )
+        
+        # perturb npc walkers
+        if len(mutated_scenario.npc_walkers) > 0:
+            mutated_scenario.npc_walkers = self.perturb_walker(
+                npc_walkers=mutated_scenario.npc_walkers,
+                region_x=[map_region_min_x, map_region_max_x],
+                region_y=[map_region_min_y, map_region_max_y],
+            )
+        
+        # perturb npc statics
+        if len(mutated_scenario.npc_statics) > 0:
+            mutated_scenario.npc_statics = self.perturb_static(
+                npc_statics=mutated_scenario.npc_statics,
+                retion_x=[map_region_min_x, map_region_max_x],
+                region_y=[map_region_min_y, map_region_max_y],
+            )
+        
+        # perturb weather
+        if mutated_scenario.weather is not None:
+            mutated_scenario.weather = self.perturb_weather(
+                weather=mutated_scenario.weather
+            )
+        
+        # perturb traffic light
+        if mutated_scenario.traffic_light is not None:
+            mutated_scenario.traffic_light = self.perturb_traffic_light(
+                traffic_light=mutated_scenario.traffic_light
+            )
+        
+        mutated_seed.scenario = mutated_scenario
+        
+        self._cleanup()
+        return mutated_seed
+    
+    def crossover_scenarios(
+        self,
+        seed1: FuzzSeed,
+        seed2: FuzzSeed,
+        ctn_operator: CtnSimOperator
+    ) -> Tuple[FuzzSeed, FuzzSeed]:
+        # TODO: refine and add checker
+        
+        # crossover two scenarios by exchanging npc vehicles
+        
+        if seed1.scenario.map_region.town != seed2.scenario.map_region.town:
+            logger.warning("Crossover failed due to different towns.")
+            raise ValueError("Crossover failed due to different towns.")
+        
+        mutated_seed1 = copy.deepcopy(seed1)
+        mutated_seed2 = copy.deepcopy(seed2)
+        
+        mutated_scenario = mutated_seed1.scenario
+        
+        # setup ctn
+        self.ctn_operator = ctn_operator
+        map_region = mutated_scenario.map_region
+
+        # load town & info
+        try:
+            self._setup(map_region.town)
+        except Exception as e:
+            self.ctn_operator.start()
+            try:
+                self._setup(map_region.town)
+            except Exception as e:
+                logger.error(traceback.print_exc())
+                return None
+        
+        # crossover npc vehicles
+        npc_vehicles_1 = seed1.scenario.npc_vehicles
+        npc_vehicles_2 = seed2.scenario.npc_vehicles
+        
+        if len(npc_vehicles_1) != len(npc_vehicles_2):
+            raise ValueError("Crossover failed due to different npc vehicle numbers.")
+        
+        split_point = random.randint(1, len(npc_vehicles_1))        
+        new_npc_vehicles_1 = npc_vehicles_1[:split_point] + npc_vehicles_2[split_point:]
+        new_npc_vehicles_2 = npc_vehicles_2[:split_point] + npc_vehicles_1[split_point:]
+        
+        # crossover npc walkers
+        npc_walkers_1 = seed1.scenario.npc_walkers
+        npc_walkers_2 = seed2.scenario.npc_walkers
+        
+        if len(npc_walkers_1) != len(npc_walkers_2):
+            raise ValueError("Crossover failed due to different npc walker numbers.")
+        
+        split_point = random.randint(1, len(npc_walkers_1))        
+        new_npc_walkers_1 = npc_walkers_1[:split_point] + npc_walkers_2[split_point:]
+        new_npc_walkers_2 = npc_walkers_2[:split_point] + npc_walkers_1[split_point:]
+        
+        # crossover npc statics
+        npc_statics_1 = seed1.scenario.npc_statics
+        npc_statics_2 = seed2.scenario.npc_statics
+        
+        if len(npc_statics_1) != len(npc_statics_2):
+            raise ValueError("Crossover failed due to different npc static numbers.")
+        
+        split_point = random.randint(1, len(npc_statics_1))        
+        new_npc_statics_1 = npc_statics_1[:split_point] + npc_statics_2[split_point:]
+        new_npc_statics_2 = npc_statics_2[:split_point] + npc_statics_1[split_point:]
+        
+        # crossover weather
+        weather_1 = seed1.scenario.weather
+        weather_2 = seed2.scenario.weather
+        if random.random() < 0.5:
+            new_weather_1 = weather_1
+            new_weather_2 = weather_2
+        else:
+            new_weather_1 = weather_2
+            new_weather_2 = weather_1
+            
+        # crossover traffic light
+        traffic_light_1 = seed1.scenario.traffic_light
+        traffic_light_2 = seed2.scenario.traffic_light
+        if random.random() < 0.5:
+            new_traffic_light_1 = traffic_light_1
+            new_traffic_light_2 = traffic_light_2
+        else:
+            new_traffic_light_1 = traffic_light_2
+            new_traffic_light_2 = traffic_light_1
+        
+        # assign to seeds
+        # new seed 1
+        mutated_seed1.scenario.npc_vehicles = new_npc_vehicles_1
+        mutated_seed1.scenario.npc_walkers = new_npc_walkers_1
+        mutated_seed1.scenario.npc_statics = new_npc_statics_1
+        mutated_seed1.scenario.weather = new_weather_1
+        mutated_seed1.scenario.traffic_light = new_traffic_light_1
+        # new seed 2
+        mutated_seed2.scenario.npc_vehicles = new_npc_vehicles_2
+        mutated_seed2.scenario.npc_walkers = new_npc_walkers_2
+        mutated_seed2.scenario.npc_statics = new_npc_statics_2
+        mutated_seed2.scenario.weather = new_weather_2
+        mutated_seed2.scenario.traffic_light = new_traffic_light_2      
+        
+        self._cleanup()
+        return mutated_seed1, mutated_seed2
+    

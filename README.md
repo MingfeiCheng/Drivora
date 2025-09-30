@@ -22,8 +22,7 @@ It is designed to support:
 - ⚡ **Distributed and parallel execution** for large-scale testing  
 - 👥 **Multi-agent and multi-vehicle** testing settings  
 
-Drivora enables **unified, extensible, and automated testing** of ADS safety and reliability across complex driving scenarios.  
-Its modular design allows researchers to **prototype and extend new testing methods** without dealing with low-level deployment details.
+Drivora enables **unified, extensible, and automated testing** of ADS safety and reliability across complex driving scenarios. Its modular design allows researchers to **prototype and extend new testing methods** without dealing with low-level deployment details.
 
 <p align="center">
   <img src="assets/design.png" alt="Drivora Design" width="700" style="margin-bottom: -20px;" />
@@ -87,8 +86,7 @@ Carla/
 
 ### ⚙️ Installation
 
-Different ADSs and testing techniques often depend on heterogeneous libraries, which may cause dependency conflicts.  
-We provide a quick script for installation: 
+Different ADSs and testing techniques often depend on heterogeneous libraries, which may cause dependency conflicts. We provide a quick script for installation: 
 
 ```bash
 bash install.sh [ads_name] [tester_name] [carla_version]
@@ -127,8 +125,7 @@ scenario_datasets/open_scenario/0.9.10.1/route_100_200/Town01_0002.json
 
 ### Step 2: Run Testing
 
-You can configure testing for any seed scenario and ADS by editing the demo scripts in `scripts/`.  
-As a quick example, here is how to run **Random testing** on **Roach** with an initial seed:
+You can configure testing for any seed scenario and ADS by editing the demo scripts in `scripts/`. As a quick example, here is how to run **Random testing** on **Roach** with an initial seed:
 
 ```bash
 bash scripts/demo_roach.sh
@@ -187,8 +184,7 @@ To develop your own **search-based testing methods**, please refer to the provid
 
 ## 🤝 Contributing
 
-Contributions of all kinds are welcome!  
-We encourage opening an issue first for discussion. Once confirmed, you can submit a Pull Request.  
+Contributions of all kinds are welcome! We encourage opening an issue first for discussion. Once confirmed, you can submit a Pull Request.  
 
 1. Fork this repository  
 2. Create a new branch  

@@ -220,8 +220,13 @@ class RandomFuzzer(Fuzzer):
         # Run execution in parallel (container + scenario simulation)
         exec_results = self.execute_population(individuals)
 
-        for ind_index, scenario_dir in exec_results:
+        original_num = len(individuals)
+        for ind_index, scenario_exec_status, scenario_dir in exec_results:
             # Evaluate oracle and feedback on the produced scenario
+            
+            if not scenario_exec_status:
+                # has error of this execution
+                continue
             
             visualize_trajectories(scenario_dir)
             
@@ -268,6 +273,14 @@ class RandomFuzzer(Fuzzer):
             
             individuals[ind_index] = ind
 
+        if len(individuals) < original_num:
+            logger.warning(f"Some individuals failed during execution, {len(individuals)}/{original_num} left after evaluation.")
+            # extend the individuals list to match original length
+            while len(individuals) < original_num:
+                # NOTE: if all failed, I think there are critial errors, should exit
+                dummy_ind = copy.deepcopy(individuals[0])
+                individuals.append(dummy_ind)
+                
         return individuals
 
     def run(self):

@@ -174,7 +174,7 @@ class AgentWrapper(object):
                 # create sensor
                 sensor_transform = carla.Transform(sensor_location, sensor_rotation)
                 sensor = self.ctn_operator.get_world().spawn_actor(bp, sensor_transform, vehicle)
-                logger.info(f"Spawned sensor {sensor_spec['id']} of type {sensor_spec['type']} at location {sensor_location} with rotation {sensor_rotation}")
+                # logger.info(f"Spawned sensor {sensor_spec['id']} of type {sensor_spec['type']}")
                 
             # setup callback
             sensor.listen(CallBack(sensor_spec['id'], sensor_spec['type'], sensor, self._agent.sensor_interface))

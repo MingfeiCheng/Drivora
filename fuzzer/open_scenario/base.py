@@ -257,15 +257,11 @@ class Fuzzer(object):
             open_vis=open_vis,
         )
         
-        if not run_status:
-            logger.error(f"Scenario {seed.id} run failed.")
-            return (float("inf"),)
-
         # overwrite seed file
         with open(seed_path, "w") as f:
             json.dump(seed.to_dict(), f, indent=4)
             
-        return scenario_dir
+        return run_status, scenario_dir
 
     @staticmethod
     def worker(task_queue, result_queue, ctn_manager, fuzzer_execution_instance):
@@ -289,9 +285,9 @@ class Fuzzer(object):
                 # Merge ctn_cfg into the task
                 full_task = list(partial_task)
                 full_task[1] = ctn_cfg.to_dict()   # index 1 is ctn_config
-                scenario_dir = fuzzer_execution_instance(*full_task)
+                run_status, scenario_dir = fuzzer_execution_instance(*full_task)
 
-                result_queue.put((ind_index, scenario_dir))
+                result_queue.put((ind_index, run_status, scenario_dir))
 
             except Exception as e:
                 logger.error(f"Worker error: {e}")

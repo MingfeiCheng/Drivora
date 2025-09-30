@@ -340,7 +340,13 @@ class ScenarioMutator:
             for ego_wp in ego_start_wps:
                 ego_loc = [ego_wp.transform.location.x, ego_wp.transform.location.y, ego_wp.transform.location.z]
                 dist = np.linalg.norm(np.array(sp_loc) - np.array(ego_loc))
-                if dist < ScenarioSpace.MIN_START_DISTANCE_FROM_EGO or dist > ScenarioSpace.MAX_START_DISTANCE_FROM_EGO:
+                
+                if sp.lane_id == ego_wp.lane_id and sp.section_id == ego_wp.section_id and sp.road_id == ego_wp.road_id:
+                    if dist < ScenarioSpace.MIN_START_DISTANCE_FROM_EGO:
+                        is_valid = False
+                        break
+                
+                if dist > ScenarioSpace.MAX_START_DISTANCE_FROM_EGO:
                     is_valid = False
                     break
                 

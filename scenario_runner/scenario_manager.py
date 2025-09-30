@@ -647,7 +647,7 @@ class ScenarioManager(object):
         actor_config_mapper = {actor.id: config_id for config_id, actor in config_other_actors.items() if actor is not None}
         
         # get vehicles
-        other_vehicles = self.ctn_operator.get_world().get_actors().filter('*vehicle.*')
+        other_vehicles = self.ctn_operator.get_world().get_actors().filter('vehicle.*')
         for other_vehicle in other_vehicles:            
             if other_vehicle.id in covered_actor_ids:
                 continue
@@ -657,7 +657,7 @@ class ScenarioManager(object):
             covered_actor_ids.append(other_vehicle.id)
             
         # get walkers
-        other_walkers = self.ctn_operator.get_world().get_actors().filter('*walker*')
+        other_walkers = self.ctn_operator.get_world().get_actors().filter('walker*') # filter controller.ai.walker
         for other_walker in other_walkers:
             if other_walker.id in covered_actor_ids:
                 continue
@@ -840,6 +840,7 @@ class ScenarioManager(object):
             actor_info['green_time'] = actor.get_green_time()
             actor_info['yellow_time'] = actor.get_yellow_time()
             actor_info['red_time'] = actor.get_red_time()
+        
         elif isinstance(actor, carla.TrafficSign) and (not isinstance(actor, carla.TrafficLight)):
             actor_info['category'] = 'traffic_sign'
             actor_info['trigger_volume'] = {

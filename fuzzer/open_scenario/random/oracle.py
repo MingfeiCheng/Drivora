@@ -77,6 +77,9 @@ class ScenarioOracle:
                     for npc_actor in npc_actors:
                         npc_location = npc_actor['location']
                         npc_yaw = npc_actor['rotation'][2]
+                        if 'bounding_box' not in npc_actor:
+                            logger.warning(f"NPC actor {npc_actor} has no bounding box info, skip collision recheck.")
+                        
                         npc_bbox = npc_actor['bounding_box']
                         
                         npc_bbox_polygon = calculate_bbox_polygon_2d(

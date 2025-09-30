@@ -10,6 +10,13 @@
   </p>
 </div>
 
+<p align="center">
+  <img src="assets/demo1.gif" width="22%"/>
+  <img src="assets/demo2.gif" width="22%"/>
+  <img src="assets/demo3.gif" width="22%"/>
+  <img src="assets/demo4.gif" width="22%"/>
+</p>
+
 ---
 
 ## 🧭 Overview

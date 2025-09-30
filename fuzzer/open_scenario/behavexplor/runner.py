@@ -89,16 +89,21 @@ class BehAVExplor(Fuzzer):
         ###### The following should be in checkpoint ########
         # 5. pipeline config
         self.initial_corpus_size = self.pipeline_config.get('initial_corpus_size', 4)
-        self.batch_size = GlobalConfig.parallel_num
+        self.batch_size = GlobalConfig.parallel_num # we use the parallel number as batch size
         
         # 6. internal parameters & checkpoint information
         # internal parameters used in fuzzer
         # we need (1) all seeds, (2) corpus index and 
         self.generation_step = 0
+        self.best_safety = 1.0 # lower is better
+        self.best_diversity = 0.0 # larger is better
         self.all_seeds: List[BehSeed] = [] 
         self.seed_corpus: List[int] = [] # keeps existing seeds of index in all_seeds
         self.F_corpus: List[int] = [] # keeps valid fault seeds of index in all_seeds
         self.new_corpus: List[int] = [] # keeps valid new coverage seeds of index in all_seeds
+        
+        self.logbook = tools.Logbook()
+        self.logbook.header = ["gen", "overall", "safety", "diversity"]
         
         # 7. load initial seed
         self.initial_seed = BehSeed.load_from_scenario_file(self.seed_path)
@@ -147,14 +152,24 @@ class BehAVExplor(Fuzzer):
             self.F_corpus = checkpoint_data['F_corpus']
             self.seed_corpus = checkpoint_data['seed_corpus']
             self.new_corpus = checkpoint_data['new_corpus']
+            self.best_safety = checkpoint_data['best_safety']
+            self.best_diversity = checkpoint_data['best_diversity']
             
             self.all_seeds = [
                 BehSeed.load_from_dict(seed_dict) for seed_dict in checkpoint_data['all_seeds']
             ]
-            self.initial_seed = FuzzSeed.load_from_dict(checkpoint_data['initial_seed'])
+            self.initial_seed = BehSeed.load_from_dict(checkpoint_data['initial_seed'])
             
             self.feedback.load_checkpoint(checkpoint_data['feedback_model'])
             
+            # load logbook
+            logbook_file = os.path.join(self.output_root, "logbook.json")
+            if os.path.exists(logbook_file):
+                with open(logbook_file, 'r') as f:
+                    log_data = json.load(f)
+                    for entry in log_data:
+                        self.logbook.record(**entry)
+                        
             logger.info('Load checkpoint from {}', self.checkpoint_path)
         else:
             logger.warning('Checkpoint file not found, start from scratch.')
@@ -164,6 +179,8 @@ class BehAVExplor(Fuzzer):
         Save checkpoint
         """
         checkpoint_data = {
+            "best_safety": self.best_safety,
+            "best_diversity": self.best_diversity,
             "initial_corpus_size": self.initial_corpus_size,
             "generation_step": self.generation_step,
             "F_corpus": self.F_corpus,
@@ -182,9 +199,11 @@ class BehAVExplor(Fuzzer):
             'summary': {
                 'total_iterations': self.generation_step,
                 'F_size': len(self.F_corpus),
+                'best_safety': self.best_safety,
+                'best_diversity': self.best_diversity,
                 'new_coverage_size': len(self.new_corpus),
                 'time_budget_hours': self.time_budget,
-                'time_used_hours': (self.time_counter / 3600.0 if self.time_budget is not None else None),
+                'time_used_hours': self.used_time / 3600.0,
                 'seed_corpus_size': len(self.seed_corpus),
                 'total_seeds': len(self.all_seeds),
                 'F_corpus': self.F_corpus,
@@ -205,6 +224,10 @@ class BehAVExplor(Fuzzer):
         overview_res_file = os.path.join(self.output_root, 'overview.json')
         with open(overview_res_file, 'w') as f:
             json.dump(overview_res, f, indent=4)
+            
+        # save lookbook
+        with open(os.path.join(self.output_root, "logbook.json"), 'w') as f:
+            json.dump(self.logbook, f, indent=2, default=str)
     
     def initialize_individual(self, ind: BehSeed) -> BehSeed:
         # initialize the individual by mutating the initial seed
@@ -382,10 +405,6 @@ class BehAVExplor(Fuzzer):
         logger.info('===== Start Fuzzer (BehAVExplor) =====')
         start_time = datetime.now()
         
-        logbook = tools.Logbook()
-        logbook.header = ["gen", "safety_score", "diversity_score"]
-        best_fitness_so_far = float("inf")
-        
         while len(self.seed_corpus) < self.initial_corpus_size:
             
             if self.termination_check(start_time):
@@ -406,6 +425,12 @@ class BehAVExplor(Fuzzer):
             pop = self.toolbox.evaluate(pop)
             for ind in pop:
                 self.toolbox.update_corpus(ind)
+                
+                # update best safety and diversity
+                if ind.safety_score < self.best_safety:
+                    self.best_safety = ind.safety_score
+                if ind.diversity_score > self.best_diversity:
+                    self.best_diversity = ind.diversity_score
         
         # initialize the coverage model
         if self.feedback.is_initialized == False:
@@ -451,6 +476,12 @@ class BehAVExplor(Fuzzer):
             
             for ind in pop:
                 self.toolbox.update_corpus(ind)
+                
+                # update best safety and diversity
+                if ind.safety_score < self.best_safety:
+                    self.best_safety = ind.safety_score
+                if ind.diversity_score > self.best_diversity:
+                    self.best_diversity = ind.diversity_score
             
             self.save_checkpoint()
             

@@ -1,7 +1,7 @@
 import carla
 import py_trees
 
-from typing import List
+from typing import Optional, List, Dict
 from pydantic import BaseModel, Field
 
 from ..atomic import AtomicBehavior
@@ -9,18 +9,30 @@ from ..atomic import AtomicBehavior
 from scenario_elements.config import Waypoint
 from scenario_runner.ctn_operator import CtnSimOperator
 
-class AIWalkerBehaviorConfig(BaseModel):
+class AIWalkerConfig(BaseModel):
     
-    route: List[Waypoint] = Field(
-        ..., description="List of waypoints describing the route"
+    id: str = Field(..., description="Unique identifier of the NPC walker")
+    model: str = Field(..., description="walker model name")
+    rolename: str = Field(..., description="Role name, e.g., 'ego' or 'npc'")
+    color: Optional[str] = Field(
+        None, description="Walker color in format '(r,g,b)'"
     )
+    category: Optional[str] = Field("pedestrian", description="walker category, e.g., 'walker'")
+    trigger_time: float = Field(..., ge=0, description="Time to start moving (seconds)")
+    route: List[Waypoint] = Field(
+        ..., description="Behavior configuration for the walker"
+    )
+    
+    def get_initial_waypoint(self) -> Waypoint:
+        return self.route[0]
     
     def get_sink_location(self) -> carla.Location:
         if not self.route:
             raise ValueError("Route is empty, cannot get sink location")
         last_wp = self.route[-1]
-        return carla.Location(x=last_wp['x'], y=last_wp['y'], z=last_wp.get('z', 0.5))
-
+        return carla.Location(x=last_wp.x, y=last_wp.y, z=last_wp.z)
+    
+    
 class AIWalkerBehavior(AtomicBehavior):
     """
     Behavior that creates a walker controlled by AI Walker controller.
@@ -36,7 +48,7 @@ class AIWalkerBehavior(AtomicBehavior):
         self, 
         ctn_operator: CtnSimOperator, 
         actor: carla.Actor,
-        config: AIWalkerBehaviorConfig,
+        config: AIWalkerConfig,
         name="AIWalkerBehavior"
     ):
         """
@@ -86,8 +98,9 @@ class AIWalkerBehavior(AtomicBehavior):
         if controller:
             controller.stop()
             controller.destroy()
-        if walker:
-            self.ctn_operator.remove_actor(walker)
+        # if walker:
+        #     self.ctn_operator.remove_actor(walker)
+        # keep walker
 
     def terminate(self, new_status):
         """

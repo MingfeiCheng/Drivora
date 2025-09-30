@@ -22,7 +22,9 @@ It is designed to support:
 - ⚡ **Distributed and parallel execution** for large-scale testing  
 - 👥 **Multi-agent and multi-vehicle** testing settings  
 
-Drivora enables **unified, extensible, and automated testing** of ADS safety and reliability across complex driving scenarios. Its modular design allows researchers to **prototype and extend new testing methods** without dealing with low-level deployment details.
+Drivora enables **unified, extensible, and automated testing** of ADS safety and reliability across complex driving scenarios. Its modular design allows researchers to **prototype and extend new testing methods** without dealing with low-level deployment details. 
+
+If you find **Drivora** useful, please consider giving it a ⭐ on GitHub! Thank you!
 
 <p align="center">
   <img src="assets/design.png" alt="Drivora Design" width="700" style="margin-bottom: -20px;" />
@@ -175,6 +177,13 @@ Drivora incorporates multiple ADS fuzzers, each with different scenario definiti
 
 To develop your own **search-based testing methods**, please refer to the provided examples and associated papers.
 
+## 🎬 Scenario Definition
+
+Scenarios are essential for testing. In **Drivora**, we define a scenario format called **OpenScenario**, which directly uses low-level actionable parameters (see the figure below). This template is flexible enough to cover most testing requirements. Drivora also supports extensions with other scenario formats, though some additional effort may be required — see [scenario_corpus](scenario_corpus/README.md) for details.
+
+<p align="center">
+  <img src="assets/OpenScenario.png" alt="Scenario Design" width="700" style="margin-bottom: -20px;" />
+</p>
 
 ## ✅ TODO
 
@@ -221,6 +230,15 @@ We would like to acknowledge the following open-source projects and communities 
 - All open-source Autonomous Driving Systems (ADSs)
 - [CARLA ScenarioRunner](https://github.com/carla-simulator/scenario_runner)
 - [CARLA Leaderboard](https://github.com/carla-simulator/leaderboard)
+
+This project builds on our previous research contributions, including:  
+
+- **BehAVExplor** — ISSTA 2023  
+- **Decictor** — ICSE 2025  
+- **MoDitector** — ISSTA 2025  
+- **STCLocker** — Preprint  
+- **ADReFT** — Preprint  
+
 
 ## 📝 Contact & License
 

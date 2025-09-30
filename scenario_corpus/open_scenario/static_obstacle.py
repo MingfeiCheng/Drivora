@@ -103,7 +103,7 @@ class StaticObstacleScenario(ScenarioTree):
             py_trees_name = f"static_obstacle_{actor_config.id}"
 
             actor_tree = py_trees.composites.Sequence(name=py_trees_name)
-            actor_start_wp = actor_config.route[0]
+            actor_start_wp = actor_config.location
             actor_transform = carla.Transform(
                 location=carla.Location(
                     x=actor_start_wp.x,

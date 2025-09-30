@@ -21,6 +21,7 @@ from agent_corpus.atomic.route_manipulation import interpolate_trajectory
 from .waypoint_vehicle import WaypointVehicleScenario
 from .ai_walker import AIWalkerScenario
 from .traffic_light import TrafficLightScenario
+from .static_obstacle import StaticObstacleScenario
 
 from .config import ScenarioConfig
 
@@ -164,6 +165,26 @@ class OpenScenario(BasicScenario):
         
         if walker_scenario_instance:
             self.list_scenarios.append(walker_scenario_instance)
+            
+        # create static obstacle scenario
+        try:
+            static_obstacle_scenario_instance = StaticObstacleScenario(
+                self.config.id + '_static_obstacle',
+                self.config.npc_statics,
+                self.ctn_operator
+            )
+            static_obstacle_scenario_instance.initialize()
+            if self.ctn_operator.is_sync_mode:
+                self.world.tick()
+            else:
+                self.world.wait_for_tick()
+        except Exception as e:
+            logger.warning("Skipping scenario '{}' due to setup error: {}".format('StaticObstacle', e))
+            traceback.print_exc()
+            static_obstacle_scenario_instance = None
+        
+        if static_obstacle_scenario_instance:
+            self.list_scenarios.append(static_obstacle_scenario_instance)
 
         # set traffic lights to green
         # set traffic light

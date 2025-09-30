@@ -2,33 +2,15 @@ import carla
 import py_trees
 
 from loguru import logger
-from typing import Optional, List, Dict
-from pydantic import BaseModel, Field
+from typing import List, Dict
 
 from scenario_elements.trigger.atomic import TriggerTimer, StandStill
 from scenario_elements.behavior.atomic import ActorDestroy, ActorTransformSetter
-from scenario_elements.behavior.ai_walker.behavior import AIWalkerBehavior, AIWalkerBehaviorConfig, Waypoint
+from scenario_elements.behavior.ai_walker.behavior import AIWalkerBehavior, AIWalkerConfig
 
 from scenario_runner.ctn_operator import CtnSimOperator
 from scenario_corpus.base.sub_scenario import ScenarioTree
 
-class AIWalkerConfig(BaseModel):
-    
-    id: str = Field(..., description="Unique identifier of the NPC walker")
-    model: str = Field(..., description="walker model name")
-    rolename: str = Field(..., description="Role name, e.g., 'ego' or 'npc'")
-    color: Optional[str] = Field(
-        None, description="Walker color in format '(r,g,b)'"
-    )
-    category: Optional[str] = Field("pedestrian", description="walker category, e.g., 'walker'")
-    trigger_time: float = Field(..., ge=0, description="Time to start moving (seconds)")
-    behavior: AIWalkerBehaviorConfig = Field(
-        ..., description="Behavior configuration for the walker"
-    )
-    
-    def get_initial_waypoint(self) -> Waypoint:
-        return self.behavior.route[0]
-    
 class AIWalkerScenario(ScenarioTree):
     """
     NPC vehicle scenario tree, used to manage NPC vehicle scenarios.
@@ -139,8 +121,33 @@ class AIWalkerScenario(ScenarioTree):
 
             actor_tree.add_child(actor_behavior)
             actor_tree.add_child(StandStill(actor, name=f"{py_trees_name}_behavior_standstill", duration=5)) # 80 < 90
-            actor_tree.add_child(ActorDestroy(actor))
+            actor_tree.add_child(ActorDestroy(actor)) # no destroy
 
             actor_behavior_pool.add_child(actor_tree)
 
         return actor_behavior_pool
+    
+    def remove_all_actors(self):
+        """
+        Remove all actors
+        """
+        if not hasattr(self, 'other_actors'):
+            return
+        
+        for i, _ in self.other_actors.items():
+            if self.other_actors[i] is not None:
+                was_destroyed = self.ctn_operator.remove_actor(self.other_actors[i])
+                # if was_destroyed:
+                #     logger.debug(f"Actor {self.other_actors[i].id} destroyed successfully.")
+                # else:
+                #     logger.warning(f"Actor {self.other_actors[i].id} could not be destroyed.")
+                self.other_actors[i] = None
+        self.other_actors = {}
+        
+        # filter ai controller
+        # filter all controllers
+        # NOTE: may distroy other controllers in other scenarios
+        existing_ai_controllers = self.ctn_operator.get_world().get_actors().filter('controller.ai.walker')
+        for controller in existing_ai_controllers:
+            controller.stop()
+            controller.destroy()

@@ -276,16 +276,15 @@ class ScenarioMutator:
                 break
             wp = random.choice(next_wps)
 
-        # 如果不允许终点在 junction，且最后一个点是 junction，就往前继续走
         if not_junction and route and route[-1].is_junction:
-            for _ in range(5):  # 最多尝试 5 步往前找非 junction 点
+            for _ in range(5): 
                 next_wps = wp.next(step_dist)
                 if not next_wps:
                     break
                 wp = random.choice(next_wps)
                 route.append(wp)
                 if not wp.is_junction:
-                    break  # 找到非路口点就停
+                    break 
         return route
 
     def reverse_follow_lane(
@@ -406,15 +405,101 @@ class ScenarioMutator:
         self,
         sample_num: int = 1,
         spawn_points: List[Waypoint] = [],
-    ):
-        pass
+        ego_start_wps: List[Waypoint] = [],
+    ) -> List[List[Waypoint]]:
+        # filter too far spawn points
+        valid_spawn_points = []
+        for sp in spawn_points:
+            sp_loc = [sp.transform.location.x, sp.transform.location.y, sp.transform.location.z]
+            is_valid = True
+            for ego_wp in ego_start_wps:
+                ego_loc = [ego_wp.transform.location.x, ego_wp.transform.location.y, ego_wp.transform.location.z]
+                dist = np.linalg.norm(np.array(sp_loc) - np.array(ego_loc))
+                if dist < ScenarioSpace.MIN_START_DISTANCE_FROM_EGO or dist > ScenarioSpace.MAX_START_DISTANCE_FROM_EGO:
+                    is_valid = False
+                    break
+                
+            if is_valid:
+                valid_spawn_points.append(sp)
+        
+        # sample near ones
+        if len(valid_spawn_points) > sample_num:
+            npc_start_wps = random.sample(valid_spawn_points, sample_num)
+        else:
+            npc_start_wps = valid_spawn_points
+            
+        # sample routes
+        npc_routes = []
+        for i in range(len(npc_start_wps)):
+            # random sample two points
+            # current impl does not support speed
+            npc_end_wp = random.choice(spawn_points) # do not map to the driving lane
+            
+            final_route = list()
+            for wp in [npc_start_wps[i], npc_end_wp]:
+                final_route.append(
+                    Waypoint(
+                        x=wp.transform.location.x,
+                        y=wp.transform.location.y,
+                        z=wp.transform.location.z,
+                        pitch=wp.transform.rotation.pitch,
+                        yaw=wp.transform.rotation.yaw,
+                        roll=wp.transform.rotation.roll,
+                        speed=0.0,
+                        road_option="NONE"
+                    )
+                )            
+            npc_routes.append(final_route)
+        return npc_routes
     
     def sample_static_location(
         self,
         sample_num: int = 1,
         spawn_points: List[Waypoint] = [],
-    ):
-        pass
+        ego_start_wps: List[Waypoint] = [],
+    ) -> List[Waypoint]:
+        # filter too far spawn points
+        valid_spawn_points = []
+        for sp in spawn_points:
+            sp_loc = [sp.transform.location.x, sp.transform.location.y, sp.transform.location.z]
+            is_valid = True
+            for ego_wp in ego_start_wps:
+                ego_loc = [ego_wp.transform.location.x, ego_wp.transform.location.y, ego_wp.transform.location.z]
+                dist = np.linalg.norm(np.array(sp_loc) - np.array(ego_loc))
+                if dist < ScenarioSpace.MIN_START_DISTANCE_FROM_EGO or dist > ScenarioSpace.MAX_START_DISTANCE_FROM_EGO:
+                    is_valid = False
+                    break
+                
+            if is_valid:
+                valid_spawn_points.append(sp)
+        
+        # sample near ones
+        if len(valid_spawn_points) > sample_num:
+            npc_wps = random.sample(valid_spawn_points, sample_num)
+        else:
+            npc_wps = valid_spawn_points
+            
+        # randomly sample wps 
+        if len(npc_wps) > sample_num:
+            npc_selected_wps = random.sample(npc_wps, sample_num)
+        else:
+            npc_selected_wps = npc_wps
+            
+        npc_locations = []
+        for wp in npc_selected_wps:
+            npc_locations.append(
+                Waypoint(
+                    x=wp.transform.location.x,
+                    y=wp.transform.location.y,
+                    z=wp.transform.location.z,
+                    pitch=wp.transform.rotation.pitch,
+                    yaw=wp.transform.rotation.yaw,
+                    roll=wp.transform.rotation.roll,
+                    speed=0.0,
+                    road_option="NONE"
+                )
+            )            
+        return npc_locations
     
     # Weather Tool
     def sample_weather(

@@ -43,7 +43,7 @@ mutator:
     # NPC Statics
     # ========================
     MIN_STATIC_NUM: 0
-    MAX_STATIC_NUM: 5
+    MAX_STATIC_NUM: 2
 
     # ========================
     # Traffic Lights

@@ -52,6 +52,7 @@ class AVFuzzer(Fuzzer):
         # 5. pipeline config
         self.population_size = self.pipeline_config.get('population_size', 4)
         self.mutation_prob = self.pipeline_config.get('mutation_prob', 0.5)
+        self.crossover_prob = self.pipeline_config.get('crossover_prob', 0.5) # not used
         
         # 6. internal parameters & checkpoint information
         # internal parameters used in fuzzer
@@ -84,7 +85,7 @@ class AVFuzzer(Fuzzer):
         if not hasattr(creator, "Individual"):
             creator.create("Individual", FuzzSeed, fitness=creator.FitnessMin)
         
-        self.toolbox.register("mutate_resample", self.mutate_resample)
+        self.toolbox.register("resample_initial_scenario", self.resample_initial_scenario)
         self.toolbox.register("evaluate", self.evaluate)
         self.toolbox.register("mutate", self.mutation)
         self.toolbox.register("crossover", self.crossover) # random
@@ -121,11 +122,7 @@ class AVFuzzer(Fuzzer):
             ]
             self.pop = [
                 creator.Individual(
-                    id=seed.id,
-                    scenario=seed.scenario,
-                    oracle_result=seed.oracle_result,
-                    feedback_result=seed.feedback_result,
-                    is_expected=seed.is_expected,
+                    **seed.to_deap_args()
                 ) for seed in _pop
             ]
             self.initial_seed = FuzzSeed.load_from_dict(checkpoint_data['initial_seed'])
@@ -134,8 +131,6 @@ class AVFuzzer(Fuzzer):
             logbook_file = os.path.join(self.output_root, "logbook.json")
             if os.path.exists(logbook_file):
                 with open(logbook_file, 'r') as f:
-                    self.logbook = tools.Logbook()
-                    self.logbook.header = ["gen", "fitness", "best_so_far"]
                     log_data = json.load(f)
                     for entry in log_data:
                         self.logbook.record(**entry)
@@ -282,7 +277,7 @@ class AVFuzzer(Fuzzer):
 
         return individuals
     
-    def restart_ga_seed(self):
+    def resample_initial_scenario(self):
         self.generation_step += 1
         ind_id = f'gen_{self.generation_step}_initial'
         
@@ -306,11 +301,7 @@ class AVFuzzer(Fuzzer):
                 ind_id = f'gen_{self.generation_step}_ind_{i}'
 
                 ind = creator.Individual(
-                    id=ind_id,
-                    scenario=copy.deepcopy(self.initial_seed.scenario),
-                    oracle_result={},
-                    feedback_result={},
-                    is_expected=False,
+                    **self.initial_seed.to_deap_args()
                 )
                 ind.set_id(ind_id)
 
@@ -355,7 +346,7 @@ class AVFuzzer(Fuzzer):
 
             # ========== Metrics ==========
             best = tools.selBest(self.pop, 1)[0]
-            logger.debug(f"Best individual: {best.id} with fitness {best.fitness.values}")
+            logger.info(f"Best individual: {best.id} with fitness {best.fitness.values}")
             best_val = best.fitness.values[0]
             best_fitness_so_far = min(best_fitness_so_far, best_val)
 

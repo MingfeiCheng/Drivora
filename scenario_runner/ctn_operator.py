@@ -120,7 +120,7 @@ class CtnSimOperator:
                 f"{self.docker_image} " \
                 f"/bin/bash ./CarlaUE4.sh -RenderOffScreen"
         
-        logger.info(cmd)
+        # logger.info(cmd)
         process = subprocess.run(cmd, shell=True)
         
         # Wait for the container to be up

@@ -76,6 +76,7 @@ class RandomFuzzer(Fuzzer):
             logger.info("Start from scratch, time counter reset to 0.")    
 
     def setup_deap(self):
+        
         self.toolbox = base.Toolbox()
         if not hasattr(creator, "FitnessMin"):
             creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
@@ -126,8 +127,6 @@ class RandomFuzzer(Fuzzer):
             logbook_file = os.path.join(self.output_root, "logbook.json")
             if os.path.exists(logbook_file):
                 with open(logbook_file, 'r') as f:
-                    self.logbook = tools.Logbook()
-                    self.logbook.header = ["gen", "fitness", "best_so_far"]
                     log_data = json.load(f)
                     for entry in log_data:
                         self.logbook.record(**entry)
@@ -328,7 +327,7 @@ class RandomFuzzer(Fuzzer):
 
             # ========== Metrics ==========
             best = tools.selBest(self.pop, 1)[0]
-            logger.debug(f"Best individual: {best.id} with fitness {best.fitness.values}")
+            logger.info(f"Best individual: {best.id} with fitness {best.fitness.values}")
             best_val = best.fitness.values[0]
             self.best_score = min(self.best_score, best_val)
 

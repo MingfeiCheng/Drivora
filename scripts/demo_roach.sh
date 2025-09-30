@@ -2,10 +2,10 @@
 set -euo pipefail
 
 # ==== GPU Config ====
-export CUDA_VISIBLE_DEVICES=0,1,2,3 
+export CUDA_VISIBLE_DEVICES=2,3 
 
 # ==== Common Config ====
-output_root="results_demo"
+output_root="results_debug"
 run_index=1
 max_sim_time=600.0
 open_vis=true

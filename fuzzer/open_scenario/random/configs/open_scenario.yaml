@@ -1,6 +1,6 @@
 
 # algorithm
-population_size: 2  # population size
+population_size: 4  # population size
 mutation_prob: 0.5
 
 feedback:

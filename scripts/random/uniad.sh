@@ -2,25 +2,26 @@
 set -euo pipefail
 
 # ==== GPU Config ====
-export CUDA_VISIBLE_DEVICES=0,1,2,3 
+export CUDA_VISIBLE_DEVICES=2,3 
 
 # ==== Common Config ====
-output_root="results_demo"
+output_root="results"
 run_index=1
 max_sim_time=600.0
 open_vis=true
-distribute_num=4  # Number of parallel execution instances
+distribute_num=2  # Number of distributed execution instances
+carla_image="carlasim/carla:0.9.15"
 
 # ==== Agent Config ====
-agent_name="roach"
-agent_entry_point="agent_corpus.roach.agent:RoachAgent"
-agent_config_path="agent_corpus/roach/config/config_agent.yaml"
+agent_name="uniad"
+agent_entry_point="agent_corpus.uniad_vad.uniad_b2d_agent:UniadAgent"
+agent_config_path="agent_corpus/uniad_vad/adzoo/uniad/configs/stage2_e2e/base_e2e_b2d.py+agent_corpus/uniad_vad/Bench2DriveZoo/uniad_base_b2d.pth"
 
 # ==== Scenario Config ====
-seed_segment="route_50_100"
+seed_segment="route_100_200"
 seed_id="Town01_0001"
 scenario_type="open_scenario"
-scenario_seed_path="scenario_datasets/open_scenario/0.9.10.1/${seed_segment}/${seed_id}.json"
+scenario_seed_path="scenario_datasets/open_scenario/0.9.15/${seed_segment}/${seed_id}.json"
 
 # ==== Tester Config ====
 tester_type="random"
@@ -40,4 +41,5 @@ python start_fuzzer.py \
   agent.entry_point="$agent_entry_point" \
   agent.config_path="$agent_config_path" \
   scenario.type="$scenario_type" \
-  scenario.seed_path="$scenario_seed_path"
+  scenario.seed_path="$scenario_seed_path" \
+  carla.image="'${carla_image}'"

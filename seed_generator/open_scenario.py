@@ -367,7 +367,7 @@ if __name__ == "__main__":
     
     carla_version = args.image.split(':')[-1]
     
-    out_dir = os.path.join(args.out_dir, carla_version, f"route_{int(args.min_length)}_{int(args.max_length)}")
+    out_dir = os.path.join(args.out_dir, 'open_scenario', carla_version, f"route_{int(args.min_length)}_{int(args.max_length)}")
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
     

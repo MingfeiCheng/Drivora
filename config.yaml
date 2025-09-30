@@ -28,11 +28,11 @@ tester:
 
 agent:
   entry_point: "agent_corpus.roach.agent:RoachAgent"
-  config_path: "/data/d/mingfeicheng/github/Drivora-dev/Carla/agent_corpus/roach/config/config_agent.yaml"
+  config_path: "agent_corpus/roach/config/config_agent.yaml"
 
 scenario:
   type: "open_scenario"
-  seed_path: "/data/d/mingfeicheng/github/Drivora-dev/Carla/scenario_datasets/open_scenario/Town01/route_50_100/Town01_0001.json"
+  seed_path: "scenario_datasets/open_scenario/Town01/route_50_100/Town01_0001.json"
 
 hydra:
   output_subdir: null

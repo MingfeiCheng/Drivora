@@ -58,9 +58,11 @@ class AVFuzzer(Fuzzer):
         self.generation_step = 0
         self.seed_recorder = []
         self.F_corpus = [] # save all expected corpus
-        # used for saving
-        self.pop = []
         self.best_score = float("inf") # min is better
+        self.pop = []
+        
+        self.logbook = tools.Logbook()
+        self.logbook.header = ["gen", "fitness", "best_so_far"]
         
         # 7. load initial seed
         self.initial_seed = FuzzSeed.load_from_scenario_file(self.seed_path)
@@ -111,7 +113,9 @@ class AVFuzzer(Fuzzer):
             
             self.population_size = checkpoint_data['population_size']
             self.generation_step = checkpoint_data['generation_step']
+            self.seed_recorder = checkpoint_data['seed_recorder']
             self.F_corpus = checkpoint_data['F_corpus']
+            self.best_score = checkpoint_data['best_score']
             _pop = [
                 FuzzSeed.load_from_dict(seed_dict) for seed_dict in checkpoint_data['pop']
             ]
@@ -126,6 +130,16 @@ class AVFuzzer(Fuzzer):
             ]
             self.initial_seed = FuzzSeed.load_from_dict(checkpoint_data['initial_seed'])
             
+            # load logbook
+            logbook_file = os.path.join(self.output_root, "logbook.json")
+            if os.path.exists(logbook_file):
+                with open(logbook_file, 'r') as f:
+                    self.logbook = tools.Logbook()
+                    self.logbook.header = ["gen", "fitness", "best_so_far"]
+                    log_data = json.load(f)
+                    for entry in log_data:
+                        self.logbook.record(**entry)
+                        
             logger.info('Load checkpoint from {}', self.checkpoint_path)
         else:
             logger.warning('Checkpoint file not found, start from scratch.')
@@ -141,6 +155,7 @@ class AVFuzzer(Fuzzer):
             "seed_recorder": self.seed_recorder,
             "pop": [seed.to_dict() for seed in self.pop], # TODO: check this
             "initial_seed": self.initial_seed.to_dict(),
+            "best_score": self.best_score,
         }
         with open(self.checkpoint_path, 'wb') as f:
             pickle.dump(checkpoint_data, f)            
@@ -152,8 +167,9 @@ class AVFuzzer(Fuzzer):
                 'total_iterations': self.generation_step,
                 'F_size': len(self.F_corpus),
                 'time_budget_hours': self.time_budget,
-                'time_used_hours': (self.time_counter / 3600.0 if self.time_budget is not None else None),
-                'best_score': self.best_score
+                'time_used_hours': self.used_time / 3600.0,
+                'best_score': self.best_score,
+                'F_corpus': self.F_corpus
             },
             'details': {
             }
@@ -171,6 +187,10 @@ class AVFuzzer(Fuzzer):
         overview_res_file = os.path.join(self.output_root, 'overview.json')
         with open(overview_res_file, 'w') as f:
             json.dump(overview_res, f, indent=4)
+            
+        # save lookbook
+        with open(os.path.join(self.output_root, "logbook.json"), 'w') as f:
+            json.dump(self.logbook, f, indent=2, default=str)
             
     def crossover(self, ind1: FuzzSeed, ind2: FuzzSeed) -> (FuzzSeed, FuzzSeed):
         # not used in current fuzzer
@@ -212,7 +232,6 @@ class AVFuzzer(Fuzzer):
         """
         # Run execution in parallel (container + scenario simulation)
         exec_results = self.execute_population(individuals)
-        results = []
 
         for ind_index, scenario_dir in exec_results:
             # Evaluate oracle and feedback on the produced scenario
@@ -278,11 +297,6 @@ class AVFuzzer(Fuzzer):
     def run(self):
         start_time = datetime.now()
 
-        # ========== Initialize logbook ==========
-        logbook = tools.Logbook()
-        logbook.header = ["gen", "fitness", "best_so_far"]
-        best_fitness_so_far = float("inf")
-
         # ========== Initialize population ==========
         if len(self.pop) != self.population_size:
             self.pop = []
@@ -345,10 +359,10 @@ class AVFuzzer(Fuzzer):
             best_val = best.fitness.values[0]
             best_fitness_so_far = min(best_fitness_so_far, best_val)
 
-            logbook.record(
+            self.logbook.record(
                 gen=self.generation_step,
                 fitness=best_val,
-                best_so_far=best_fitness_so_far
+                best_so_far=self.best_score
             )
 
             logger.info(
@@ -357,11 +371,4 @@ class AVFuzzer(Fuzzer):
                 f"Best so far = {best_fitness_so_far:.4f}"
             )
 
-            # save results
-            best_dir = os.path.join(self.output_root, "best_seeds", f"iter_{self.generation_step}")
-            os.makedirs(best_dir, exist_ok=True)
-            with open(os.path.join(best_dir, "logbook.json"), 'w') as f:
-                json.dump(logbook, f, indent=2, default=str)
-
-            logger.info(f"[Global Iter {self.generation_step}] Saved best seed to {best_dir}")
             self.save_checkpoint()

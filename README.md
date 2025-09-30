@@ -48,6 +48,7 @@ Its modular design allows researchers to **prototype and extend new testing meth
 ### Prerequisites
 - [Docker](https://www.docker.com/)  
 - [Anaconda](https://www.anaconda.com/) (recommended)
+- [CUDA](https://developer.nvidia.com/cuda-toolkit-archive) **11.x** (ensure that the path `/usr/local/cuda-11` exists)
 
 ### Clone the Repository
 ```bash
@@ -81,15 +82,22 @@ Carla/
 ## ⚙️ Installation
 
 Different ADSs and testing techniques often depend on heterogeneous libraries, which may cause dependency conflicts.  
-We provide a quick script for installation. For example, to test **Roach** under **Random** testing with CARLA `0.9.10.1`:
+We provide a quick script for installation: 
 
 ```bash
-bash install.sh roach random 0.9.10.1
+bash install.sh [ads_name] [tester_name] [carla_version]
 ```
 
 - **First parameter** → ADS under test (e.g., `roach`)  
 - **Second parameter** → Testing method (e.g., `random`)  
 - **Third parameter** → Compatible CARLA version (check official repo of each ADS for supported versions)
+
+For example, to test **Roach** under **Random** testing with CARLA `0.9.10.1`, you can run
+```bash
+bash install.sh roach random 0.9.10.1
+```
+
+> ⚠️ Some installations may require `sudo` due to HuggingFace cache permissions, in which case you will need to enter your password manually.
 
 ---
 
@@ -99,7 +107,7 @@ bash install.sh roach random 0.9.10.1
 ```bash
 python -m seed_generator.open_scenario \
   --num 10 --town Town01 \
-  --min_length 50 --max_length 200 \
+  --min_length 50 --max_length 100 \
   --out_dir scenario_datasets \
   --image carlasim/carla:0.9.10.1
 ```
@@ -173,25 +181,28 @@ python start_fuzzer.py \
 
 ---
 
-## 🧱 ADS Corpus
+## 🚗 ADS Corpus
 
-Currently, **12 ADSs** are supported, covering **module-based**, **end-to-end**, and **vision-language-based** ADSs:
+Currently, **12 ADSs** are supported, covering **module-based**, **end-to-end**, and **vision-language-based** systems.  
+Below is an overview of the supported agents and their configurations:
 
-| ADS Agent  | ADS Type              | Original Repo                                                                                      | Entry Point                                   | Config Path                                                   |
-|------------|-----------------------|----------------------------------------------------------------------------------------------------|-----------------------------------------------|---------------------------------------------------------------|
-| Roach      | End-to-End            | [carla-roach](https://github.com/zhejz/carla-roach) | agent_corpus.roach.agent:RoachAgent           | agent_corpus/roach/config/config_agent.yaml                   |
-| LAV      | End-to-End            | [LAV](https://github.com/dotchen/LAV) | agent_corpus.lav.lav_agent:LAVAgent | agent_corpus/lav/config_v2.yaml |
-| InterFuser | End-to-End  | [InterFuser](https://github.com/opendilab/InterFuser)   |  agent_corpus.interfuser.interfuser_agent:InterfuserAgent |  agent_corpus/interfuser/interfuser_config.py |
-| TransFuser | End-to-End            | [transfuser](https://github.com/autonomousvision/transfuser)   |     agent_corpus.transfuser.agent:HybridAgent  | agent_corpus/transfuser/model_ckpt/models_2022/transfuser |
-| PlanT      | End-to-End            | [plant](https://github.com/autonomousvision/plant) | agent_corpus.plant.PlanT_agent:PlanTPerceptionAgent  |  agent_corpus/plant/carla_agent_files/config/experiments/PlanTSubmission.yaml |
-| TCP        | End-to-End            | [TCP](https://github.com/OpenDriveLab/TCP), [Bench2Drive](https://github.com/Thinklab-SJTU/Bench2Drive/tree/main) |       agent_corpus.tcp_admlp.tcp_b2d_agent:TCPAgent   |  agent_corpus/tcp_admlp/Bench2DriveZoo/tcp_b2d.ckpt   |
-| ADMLP      | End-to-End            | [ADMLP](https://github.com/E2E-AD/AD-MLP), [Bench2Drive](https://github.com/Thinklab-SJTU/Bench2Drive/tree/main) |     agent_corpus.tcp_admlp.admlp_b2d_agent:ADMLPAgent       |  agent_corpus/tcp_admlp/Bench2DriveZoo/admlp_b2d.ckpt  |
-| Uniad      | End-to-End            | [UniAD](https://github.com/OpenDriveLab/UniAD), [Bench2Drive](https://github.com/Thinklab-SJTU/Bench2Drive/tree/main) |     agent_corpus.uniad_vad.uniad_b2d_agent:UniadAgent     |  agent_corpus/uniad_vad/adzoo/uniad/configs/stage2_e2e/base_e2e_b2d.py+agent_corpus/uniad_vad/Bench2DriveZoo/uniad_base_b2d.pth |
-| VAD        | End-to-End            | [VAD](https://github.com/hustvl/VAD), [Bench2Drive](https://github.com/Thinklab-SJTU/Bench2Drive/tree/main) |    agent_corpus.uniad_vad.vad_b2d_agent:VadAgent      | agent_corpus/uniad_vad/adzoo/vad/configs/VAD/VAD_base_e2e_b2d.py+agent_corpus/uniad_vad/Bench2DriveZoo/vad_b2d_base.pth |
-| Simlingo   | Vision-Language-based | [simlingo](https://github.com/RenzKa/simlingo)                                                     | agent_corpus.simlingo.agent_simlingo:LingoAgent | agent_corpus/simlingo/checkpoint/simlingo/checkpoints/epoch=013.ckpt/pytorch_model.pt |
-| Orion      | Vision-Language-based | [Orion](https://github.com/xiaomi-mlab/Orion)     |        agent_corpus.orion.orion_b2d_agent:OrionAgent   |  will release soon |
-| Pylot      | Module-based          | [erdos-project/pylot](https://github.com/erdos-project/pylot)  |           release soon     |
-📌 See the [Agent Integration Guide](agents/atomic/README.md) for integrating your own ADS.
+| ADS Agent  | ADS Type              | Original Repository                                                                                   | Entry Point                                           | Config Path                                                                 |
+|------------|-----------------------|-------------------------------------------------------------------------------------------------------|-------------------------------------------------------|------------------------------------------------------------------------------|
+| Roach      | End-to-End            | [carla-roach](https://github.com/zhejz/carla-roach)                                                   | `agent_corpus.roach.agent:RoachAgent`                 | `agent_corpus/roach/config/config_agent.yaml`                                |
+| LAV        | End-to-End            | [LAV](https://github.com/dotchen/LAV)                                                                 | `agent_corpus.lav.lav_agent:LAVAgent`                 | `agent_corpus/lav/config_v2.yaml`                                           |
+| InterFuser | End-to-End            | [InterFuser](https://github.com/opendilab/InterFuser)                                                 | `agent_corpus.interfuser.interfuser_agent:InterfuserAgent` | `agent_corpus/interfuser/interfuser_config.py`                               |
+| TransFuser | End-to-End            | [TransFuser](https://github.com/autonomousvision/transfuser)                                          | `agent_corpus.transfuser.agent:HybridAgent`           | `agent_corpus/transfuser/model_ckpt/models_2022/transfuser`                  |
+| PlanT      | End-to-End            | [PlanT](https://github.com/autonomousvision/plant)                                                    | `agent_corpus.plant.PlanT_agent:PlanTPerceptionAgent` | `agent_corpus/plant/carla_agent_files/config/experiments/PlanTSubmission.yaml` |
+| TCP        | End-to-End            | [TCP](https://github.com/OpenDriveLab/TCP), [Bench2Drive](https://github.com/Thinklab-SJTU/Bench2Drive/tree/main) | `agent_corpus.tcp_admlp.tcp_b2d_agent:TCPAgent`       | `agent_corpus/tcp_admlp/Bench2DriveZoo/tcp_b2d.ckpt`                         |
+| ADMLP      | End-to-End            | [ADMLP](https://github.com/E2E-AD/AD-MLP), [Bench2Drive](https://github.com/Thinklab-SJTU/Bench2Drive/tree/main) | `agent_corpus.tcp_admlp.admlp_b2d_agent:ADMLPAgent`   | `agent_corpus/tcp_admlp/Bench2DriveZoo/admlp_b2d.ckpt`                       |
+| UniAD      | End-to-End            | [UniAD](https://github.com/OpenDriveLab/UniAD), [Bench2Drive](https://github.com/Thinklab-SJTU/Bench2Drive/tree/main) | `agent_corpus.uniad_vad.uniad_b2d_agent:UniadAgent`   | `agent_corpus/uniad_vad/adzoo/uniad/configs/stage2_e2e/base_e2e_b2d.py+agent_corpus/uniad_vad/Bench2DriveZoo/uniad_base_b2d.pth` |
+| VAD        | End-to-End            | [VAD](https://github.com/hustvl/VAD), [Bench2Drive](https://github.com/Thinklab-SJTU/Bench2Drive/tree/main) | `agent_corpus.uniad_vad.vad_b2d_agent:VadAgent`       | `agent_corpus/uniad_vad/adzoo/vad/configs/VAD/VAD_base_e2e_b2d.py+agent_corpus/uniad_vad/Bench2DriveZoo/vad_b2d_base.pth` |
+| Simlingo   | Vision-Language-based | [Simlingo](https://github.com/RenzKa/simlingo)                                                        | `agent_corpus.simlingo.agent_simlingo:LingoAgent`     | `agent_corpus/simlingo/checkpoint/simlingo/checkpoints/epoch=013.ckpt/pytorch_model.pt` |
+| Orion      | Vision-Language-based | [Orion](https://github.com/xiaomi-mlab/Orion)                                                         | `agent_corpus.orion.orion_b2d_agent:OrionAgent`       | *Will be released soon*                                                     |
+| Pylot      | Module-based          | [pylot](https://github.com/erdos-project/pylot)                                                       | *Will be released soon*                              | *Will be released soon*                                                     |
+
+📌 See the [Agent Corpus](agents/README.md) for more details and instructions on integrating your own ADS.
+
 
 ## 🔬 Fuzzing Tools
 
@@ -204,6 +215,8 @@ Drivora incorporates multiple fuzzers, each with different scenario definitions,
 - [SAMOTA](fuzzer/open_scenario/samota/README.md)  
 - [DriveFuzz](fuzzer/open_scenario/drivefuzz/README.md)
 - ... 🔄 more coming soon!
+
+⚠️ **Note**: We cannot guarantee that the performance reproced by Drivora will be fully consistent with the results in the original papers, as different platforms may lead to variations.  Some components are still under development — we will continue to update the repository and address issues over time.
 
 ---
 

@@ -58,9 +58,11 @@ class RandomFuzzer(Fuzzer):
         self.generation_step = 0
         self.seed_recorder = []
         self.F_corpus = [] # save all expected corpus
-        # used for saving
-        self.pop = []
         self.best_score = float("inf") # min is better
+        self.pop = []
+        
+        self.logbook = tools.Logbook()
+        self.logbook.header = ["gen", "fitness", "best_so_far"]
         
         # 7. load initial seed
         self.initial_seed = FuzzSeed.load_from_scenario_file(self.seed_path)
@@ -107,20 +109,28 @@ class RandomFuzzer(Fuzzer):
             
             self.population_size = checkpoint_data['population_size']
             self.generation_step = checkpoint_data['generation_step']
+            self.seed_recorder = checkpoint_data['seed_recorder']
             self.F_corpus = checkpoint_data['F_corpus']
+            self.best_score = checkpoint_data['best_score']
             _pop = [
                 FuzzSeed.load_from_dict(seed_dict) for seed_dict in checkpoint_data['pop']
             ]
             self.pop = [
                 creator.Individual(
-                    id=seed.id,
-                    scenario=seed.scenario,
-                    oracle_result=seed.oracle_result,
-                    feedback_result=seed.feedback_result,
-                    is_expected=seed.is_expected,
+                    **seed.to_deap_args()
                 ) for seed in _pop
             ]
             self.initial_seed = FuzzSeed.load_from_dict(checkpoint_data['initial_seed'])
+            
+            # load logbook
+            logbook_file = os.path.join(self.output_root, "logbook.json")
+            if os.path.exists(logbook_file):
+                with open(logbook_file, 'r') as f:
+                    self.logbook = tools.Logbook()
+                    self.logbook.header = ["gen", "fitness", "best_so_far"]
+                    log_data = json.load(f)
+                    for entry in log_data:
+                        self.logbook.record(**entry)
             
             logger.info('Load checkpoint from {}', self.checkpoint_path)
         else:
@@ -137,6 +147,7 @@ class RandomFuzzer(Fuzzer):
             "seed_recorder": self.seed_recorder,
             "pop": [seed.to_dict() for seed in self.pop], # TODO: check this
             "initial_seed": self.initial_seed.to_dict(),
+            "best_score": self.best_score,
         }
         with open(self.checkpoint_path, 'wb') as f:
             pickle.dump(checkpoint_data, f)            
@@ -148,7 +159,7 @@ class RandomFuzzer(Fuzzer):
                 'total_iterations': self.generation_step,
                 'F_size': len(self.F_corpus),
                 'time_budget_hours': self.time_budget,
-                'time_used_hours': (self.time_counter / 3600.0 if self.time_budget is not None else None),
+                'time_used_hours': self.used_time / 3600.0,
                 'best_score': self.best_score,
                 'F_corpus': self.F_corpus
             },
@@ -168,6 +179,10 @@ class RandomFuzzer(Fuzzer):
         overview_res_file = os.path.join(self.output_root, 'overview.json')
         with open(overview_res_file, 'w') as f:
             json.dump(overview_res, f, indent=4)
+            
+        # save lookbook
+        with open(os.path.join(self.output_root, "logbook.json"), 'w') as f:
+            json.dump(self.logbook, f, indent=2, default=str)
     
     def mutation(self, source_seed: FuzzSeed) -> FuzzSeed:
         # this should be in the logical scenario space
@@ -205,7 +220,6 @@ class RandomFuzzer(Fuzzer):
         """
         # Run execution in parallel (container + scenario simulation)
         exec_results = self.execute_population(individuals)
-        results = []
 
         for ind_index, scenario_dir in exec_results:
             # Evaluate oracle and feedback on the produced scenario
@@ -259,12 +273,7 @@ class RandomFuzzer(Fuzzer):
 
     def run(self):
         start_time = datetime.now()
-
-        # ========== Initialize logbook ==========
-        logbook = tools.Logbook()
-        logbook.header = ["gen", "fitness", "best_so_far"]
-        best_fitness_so_far = float("inf")
-
+        
         # ========== Initialize population ==========
         if len(self.pop) != self.population_size:
             self.pop = []
@@ -274,11 +283,7 @@ class RandomFuzzer(Fuzzer):
                 ind_id = f'gen_{self.generation_step}_ind_{i}'
 
                 ind = creator.Individual(
-                    id=ind_id,
-                    scenario=copy.deepcopy(self.initial_seed.scenario),
-                    oracle_result={},
-                    feedback_result={},
-                    is_expected=False,
+                    **self.initial_seed.to_deap_args()
                 )
                 ind.set_id(ind_id)
 
@@ -291,7 +296,7 @@ class RandomFuzzer(Fuzzer):
         self.pop = self.toolbox.evaluate(self.pop)
         self.save_checkpoint()
 
-        # ========== GA loop ==========
+        # ========== Search loop ==========
         while True:
             
             if self.termination_check(start_time):
@@ -325,25 +330,18 @@ class RandomFuzzer(Fuzzer):
             best = tools.selBest(self.pop, 1)[0]
             logger.debug(f"Best individual: {best.id} with fitness {best.fitness.values}")
             best_val = best.fitness.values[0]
-            best_fitness_so_far = min(best_fitness_so_far, best_val)
+            self.best_score = min(self.best_score, best_val)
 
-            logbook.record(
+            self.logbook.record(
                 gen=self.generation_step,
                 fitness=best_val,
-                best_so_far=best_fitness_so_far
+                best_so_far=self.best_score
             )
 
             logger.info(
                 f"[Gen {self.generation_step}] "
                 f"Best of generation = {best_val:.4f}, "
-                f"Best so far = {best_fitness_so_far:.4f}"
+                f"Best so far = {self.best_score:.4f}"
             )
 
-            # save results
-            best_dir = os.path.join(self.output_root, "best_seeds", f"iter_{self.generation_step}")
-            os.makedirs(best_dir, exist_ok=True)
-            with open(os.path.join(best_dir, "logbook.json"), 'w') as f:
-                json.dump(logbook, f, indent=2, default=str)
-
-            logger.info(f"[Global Iter {self.generation_step}] Saved best seed to {best_dir}")
             self.save_checkpoint()

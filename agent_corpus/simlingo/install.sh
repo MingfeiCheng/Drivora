@@ -1,3 +1,6 @@
+#!/bin/bash
+set -e  # Exit on error
+
 pip install pkgutil-resolve-name==1.3.10
 pip install numpy==1.23.0
 pip install torch==2.2.0 torchvision==0.17.0 torchaudio==2.2.0 --index-url https://download.pytorch.org/whl/cu118
@@ -12,9 +15,6 @@ pip install timm==0.9.16
 pip install peft==0.13.2
 
 pip install -e "$(dirname "$0")"
-
-#!/bin/bash
-set -e  # Exit on error
 
 REPO="RenzKa/simlingo"
 LOCAL_DIR="$(dirname "$0")/checkpoint"

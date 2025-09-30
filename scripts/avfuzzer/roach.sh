@@ -2,14 +2,14 @@
 set -euo pipefail
 
 # ==== GPU Config ====
-export CUDA_VISIBLE_DEVICES=0,1,2,3 
+export CUDA_VISIBLE_DEVICES=2,3 
 
 # ==== Common Config ====
-output_root="results_demo"
+output_root="results"
 run_index=1
 max_sim_time=600.0
 open_vis=true
-distribute_num=4  # Number of parallel execution instances
+distribute_num=2  # Number of distributed execution instances
 
 # ==== Agent Config ====
 agent_name="roach"
@@ -17,14 +17,14 @@ agent_entry_point="agent_corpus.roach.agent:RoachAgent"
 agent_config_path="agent_corpus/roach/config/config_agent.yaml"
 
 # ==== Scenario Config ====
-seed_segment="route_50_100"
-seed_id="Town01_0001"
+seed_segment="route_100_200"
+seed_id="Town01_0003"
 scenario_type="open_scenario"
 scenario_seed_path="scenario_datasets/open_scenario/0.9.10.1/${seed_segment}/${seed_id}.json"
 
 # ==== Tester Config ====
-tester_type="random"
-tester_config_path="fuzzer/open_scenario/random/configs/open_scenario.yaml"
+tester_type="avfuzzer"
+tester_config_path="fuzzer/open_scenario/avfuzzer/configs/open_scenario.yaml"
 
 run_tag="${tester_type}_${agent_name}_${seed_segment}_${seed_id}_run${run_index}"
 

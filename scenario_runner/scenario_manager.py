@@ -237,7 +237,7 @@ class ScenarioManager(object):
             for ego_config in self.scenario_config.ego_vehicles:
                 ego_id = ego_config.id
                 
-                logger.info(f"Setting up agent for ego vehicle {ego_id} with config: {ego_config}")
+                # logger.info(f"Setting up agent for ego vehicle {ego_id} with config: {ego_config}")
                 
                 agent_class = load_entry_point(ego_config.entry_point)
                 
@@ -405,12 +405,12 @@ class ScenarioManager(object):
         wallclock_t0 = GameTime.get_wallclocktime()
         
         # debug info
-        logger.debug(f"Total vehicle actors: {len(self.world.get_actors().filter('vehicle.*'))}")
-        logger.debug(f"Total walker actors: {len(self.world.get_actors().filter('walker.*'))}")
-        logger.debug(f"Total traffic light actors: {len(self.world.get_actors().filter('traffic.traffic_light*'))}")
-        logger.debug(f"Total traffic sign actors: {len(self.world.get_actors().filter('traffic.traffic_sign*'))}")
-        logger.debug(f"Total static prop actors: {len(self.world.get_actors().filter('static.prop.*'))}")
-        logger.debug(f"Total sensor actors: {len(self.world.get_actors().filter('sensor.*'))}")
+        # logger.debug(f"Total vehicle actors: {len(self.world.get_actors().filter('vehicle.*'))}")
+        # logger.debug(f"Total walker actors: {len(self.world.get_actors().filter('walker.*'))}")
+        # logger.debug(f"Total traffic light actors: {len(self.world.get_actors().filter('traffic.traffic_light*'))}")
+        # logger.debug(f"Total traffic sign actors: {len(self.world.get_actors().filter('traffic.traffic_sign*'))}")
+        # logger.debug(f"Total static prop actors: {len(self.world.get_actors().filter('static.prop.*'))}")
+        # logger.debug(f"Total sensor actors: {len(self.world.get_actors().filter('sensor.*'))}")
         
         while self._running:
             timestamp = None

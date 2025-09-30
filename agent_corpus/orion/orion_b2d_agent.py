@@ -55,6 +55,7 @@ class OrionAgent(AutonomousAgent):
         self.pidcontroller = PIDController() 
         self.config_path = path_to_conf_file.split('+')[0]
         self.ckpt_path = path_to_conf_file.split('+')[1]
+        now = datetime.datetime.now()
         if IS_BENCH2DRIVE:
             self.save_name = path_to_conf_file.split('+')[-1]
         else:
@@ -78,8 +79,18 @@ class OrionAgent(AutonomousAgent):
                             _module_path = _module_path + '.' + m
                         print(_module_path)
                         plg_lib = importlib.import_module(_module_path)  
+                        
+            # update path
+            if hasattr(cfg, 'llm_path'):
+                cfg.llm_path = os.path.join(os.path.dirname(__file__), cfg.llm_path)
+            if hasattr(cfg.model, 'tokenizer'):
+                cfg.model.tokenizer = cfg.llm_path
+            if hasattr(cfg.model, 'lm_head'):
+                cfg.model.lm_head = cfg.llm_path
+            
+            
     
-            self.model = build_model(cfg.model, train_cfg=cfg.get('train_cfg'), test_cfg=cfg.get('test_cfg'))
+            self.model = build_model(cfg.model, train_cfg=cfg.get('train_cfg', None), test_cfg=cfg.get('test_cfg', None))
             checkpoint = load_checkpoint(self.model, self.ckpt_path, map_location='cpu')
             self.model.cuda()
             self.model.eval()

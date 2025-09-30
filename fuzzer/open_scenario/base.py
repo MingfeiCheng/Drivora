@@ -155,6 +155,9 @@ class Fuzzer(object):
         # 4. create oracle (here is the offline oracle, online shoud defined criteria in feedback calculator)
         self.oracle_config = self.pipeline_config.get('oracle', {})
         
+        # other parameters
+        self.used_time = 0.0
+        
         # 5. setup toolbox
         self.toolbox = None
         self.setup_deap()
@@ -179,13 +182,13 @@ class Fuzzer(object):
     def termination_check(self, start_time) -> bool:
         curr_time = datetime.now()
         t_delta = (curr_time - start_time).total_seconds()
-        total_time = t_delta + self.time_counter
+        self.used_time = t_delta + self.time_counter
         # update total time
         with open(self.time_counter_file, 'w') as f:
-            f.write(str(total_time))
+            f.write(str(self.used_time))
             f.write('\n')
             
-        if (self.time_budget is not None) and total_time / 3600.0 > self.time_budget:
+        if (self.time_budget is not None) and self.used_time / 3600.0 > self.time_budget:
             return True
         
         if self.time_budget is None:

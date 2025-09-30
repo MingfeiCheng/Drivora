@@ -413,7 +413,8 @@ class ScenarioManager(object):
             "Static Prop": "static.prop.*",
             "Sensor": "sensor.*",
         }
-
+        
+        print()
         logger.info(f"=== Actor Statistics (Scenario {self.scenario_config.id}) ===") # NOTE: you defined scenario should have id
         for name, flt in actor_filters.items():
             count = len(self.world.get_actors().filter(flt))

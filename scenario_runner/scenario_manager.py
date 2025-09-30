@@ -106,7 +106,7 @@ class ScenarioManager(object):
             60.0,  # 60 seconds for tick watchdog
         )
         self._watchdog_agent = Watchdog(
-            120.0,  # 60 seconds for initialization watchdog
+            300.0,  # 300 seconds for initialization agent
         )
         
         # carla info

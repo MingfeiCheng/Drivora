@@ -11,23 +11,20 @@ max_sim_time=600.0
 open_vis=true
 distribute_num=2  # Number of distributed execution instances
 
-# Carla
-carla_image="carlasim/carla:0.9.15"
-
 # ==== Agent Config ====
-agent_name="orion"
-agent_entry_point="agent_corpus.orion.orion_b2d_agent:OrionAgent"
-agent_config_path="agent_corpus/orion/adzoo/orion/configs/orion_stage3_fp16.py+agent_corpus/orion/ckpts/Orion.pth"
+agent_name="lav"
+agent_entry_point="agent_corpus.lav.lav_agent:LAVAgent"
+agent_config_path="agent_corpus/lav/config_v2.yaml"
 
 # ==== Scenario Config ====
 seed_segment="route_100_200"
 seed_id="Town01_0001"
 scenario_type="open_scenario"
-scenario_seed_path="scenario_datasets/open_scenario/0.9.15/${seed_segment}/${seed_id}.json"
+scenario_seed_path="scenario_datasets/open_scenario/0.9.10.1/${seed_segment}/${seed_id}.json"
 
 # ==== Tester Config ====
-tester_type="random"
-tester_config_path="fuzzer/open_scenario/random/configs/open_scenario.yaml"
+tester_type="behavexplor"
+tester_config_path="fuzzer/open_scenario/behavexplor/configs/open_scenario.yaml"
 
 run_tag="${tester_type}_${agent_name}_${seed_segment}_${seed_id}_run${run_index}"
 
@@ -41,7 +38,6 @@ python start_fuzzer.py \
   tester.type="$tester_type" \
   tester.config_path="$tester_config_path" \
   agent.entry_point="$agent_entry_point" \
-  agent.config_path="'${agent_config_path}'" \
+  agent.config_path="$agent_config_path" \
   scenario.type="$scenario_type" \
-  scenario.seed_path="$scenario_seed_path" \
-  carla.image="'${carla_image}'"
+  scenario.seed_path="$scenario_seed_path"

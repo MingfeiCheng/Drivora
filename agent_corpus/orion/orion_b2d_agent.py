@@ -87,8 +87,6 @@ class OrionAgent(AutonomousAgent):
                 cfg.model.tokenizer = cfg.llm_path
             if hasattr(cfg.model, 'lm_head'):
                 cfg.model.lm_head = cfg.llm_path
-            
-            
     
             self.model = build_model(cfg.model, train_cfg=cfg.get('train_cfg', None), test_cfg=cfg.get('test_cfg', None))
             checkpoint = load_checkpoint(self.model, self.ckpt_path, map_location='cpu')

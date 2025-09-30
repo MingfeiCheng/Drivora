@@ -25,12 +25,15 @@ It is designed to support:
 Drivora enables **unified, extensible, and automated testing** of ADS safety and reliability across complex driving scenarios.  
 Its modular design allows researchers to **prototype and extend new testing methods** without dealing with low-level deployment details.
 
----
+<p align="center">
+  <img src="assets/design.png" alt="Drivora Design" width="700" style="margin-bottom: -20px;" />
+</p>
+
 
 ## 🚀 Features
 
-- 🔬 **Fuzzing**  
-  Built-in support for diverse scenario fuzzing and adversarial input generation.
+- 🔬 **Fuzzing/Testing**  
+  Built-in support for diverse scenario fuzzing and adversarial scenario generation.
 
 - 🧩 **ADS-Agnostic Integration**  
   Containerized interfaces for black-box and white-box ADSs.
@@ -41,9 +44,15 @@ Its modular design allows researchers to **prototype and extend new testing meth
 - 👥 **Multi-Agent Testing**  
   Supports multi-vehicle evaluation with coordinated or independent ADS behaviors.
 
----
 
 ## 📦 Getting Started
+
+### Hardware Requirements
+
+- The testing engine itself requires relatively modest resources.  
+- For simulation requirements, please refer to the [CARLA recommendations](https://github.com/carla-simulator/carla?tab=readme-ov-file#recommended-system).  
+- Most ADSs are evaluated on NVIDIA A5000 (24 GB) and L40 (48 GB) GPUs.  
+
 
 ### Prerequisites
 - [Docker](https://www.docker.com/)  
@@ -56,9 +65,7 @@ git clone https://github.com/MingfeiCheng/Drivora.git
 cd Drivora
 ```
 
----
-
-## 📂 Directory Structure
+### 📂 Directory Structure
 
 ```
 Carla/
@@ -77,9 +84,8 @@ Carla/
 └── start_fuzzer.py     # Entrypoint for launching tests
 ```
 
----
 
-## ⚙️ Installation
+### ⚙️ Installation
 
 Different ADSs and testing techniques often depend on heterogeneous libraries, which may cause dependency conflicts.  
 We provide a quick script for installation: 
@@ -99,7 +105,6 @@ bash install.sh roach random 0.9.10.1
 
 > ⚠️ Some installations may require `sudo` due to HuggingFace cache permissions, in which case you will need to enter your password manually.
 
----
 
 ## 🚦 Usage (Quick Demo)
 
@@ -120,71 +125,23 @@ scenario_datasets/open_scenario/0.9.10.1/route_100_200/Town01_0002.json
 ...
 ```
 
----
-
 ### Step 2: Run Testing
 
-You can configure testing for any seed scenario and ADS by editing demo scripts in `scripts/`.  
-Example: run **Random testing** for **Roach** with an initial seed:
+You can configure testing for any seed scenario and ADS by editing the demo scripts in `scripts/`.  
+As a quick example, here is how to run **Random testing** on **Roach** with an initial seed:
 
 ```bash
 bash scripts/demo_roach.sh
 ```
+We also provide a collection of scripts for different testing methods and ADSs under the `scripts/` directory with default settings.
+You can edit and adapt any of them for your experiments.
 
-Inside `scripts/demo_roach.sh`:
 
-```bash
-#!/bin/bash
-set -euo pipefail
-
-# ==== GPU Config ====
-export CUDA_VISIBLE_DEVICES=2,3 
-
-# ==== Common Config ====
-output_root="results"
-run_index=1
-max_sim_time=600.0
-open_vis=true
-distribute_num=2  # Number of distributed execution instances
-
-# ==== Agent Config ====
-agent_name="roach"
-agent_entry_point="agent_corpus.roach.agent:RoachAgent"
-agent_config_path="agent_corpus/roach/config/config_agent.yaml"
-
-# ==== Scenario Config ====
-seed_segment="route_100_200"
-seed_id="Town01_0001"
-scenario_type="open_scenario"
-scenario_seed_path="scenario_datasets/open_scenario/0.9.10.1/${seed_segment}/${seed_id}.json"
-
-# ==== Tester Config ====
-tester_type="random"
-tester_config_path="fuzzer/open_scenario/random/configs/open_scenario.yaml"
-
-run_tag="${tester_type}_${agent_name}_${seed_segment}_${seed_id}_run${run_index}"
-
-# ==== Run (Hydra style overrides) ====
-python start_fuzzer.py \
-  output_root="$output_root" \
-  distribute_num="$distribute_num" \
-  run_tag="$run_tag" \
-  max_sim_time="$max_sim_time" \
-  open_vis="$open_vis" \
-  tester.type="$tester_type" \
-  tester.config_path="$tester_config_path" \
-  agent.entry_point="$agent_entry_point" \
-  agent.config_path="$agent_config_path" \
-  scenario.type="$scenario_type" \
-  scenario.seed_path="$scenario_seed_path"
-```
-
----
 
 ## 🚗 ADS Corpus
 
 Currently, **12 ADSs** are supported, covering **module-based**, **end-to-end**, and **vision-language-based** systems.  
-Below is an overview of the supported agents and their configurations:
+Below is an overview of the supported agents and their default configurations:
 
 | ADS Agent  | ADS Type              | Original Repository                                                                                   | Entry Point                                           | Config Path                                                                 |
 |------------|-----------------------|-------------------------------------------------------------------------------------------------------|-------------------------------------------------------|------------------------------------------------------------------------------|
@@ -198,62 +155,50 @@ Below is an overview of the supported agents and their configurations:
 | UniAD      | End-to-End            | [UniAD](https://github.com/OpenDriveLab/UniAD), [Bench2Drive](https://github.com/Thinklab-SJTU/Bench2Drive/tree/main) | `agent_corpus.uniad_vad.uniad_b2d_agent:UniadAgent`   | `agent_corpus/uniad_vad/adzoo/uniad/configs/stage2_e2e/base_e2e_b2d.py+agent_corpus/uniad_vad/Bench2DriveZoo/uniad_base_b2d.pth` |
 | VAD        | End-to-End            | [VAD](https://github.com/hustvl/VAD), [Bench2Drive](https://github.com/Thinklab-SJTU/Bench2Drive/tree/main) | `agent_corpus.uniad_vad.vad_b2d_agent:VadAgent`       | `agent_corpus/uniad_vad/adzoo/vad/configs/VAD/VAD_base_e2e_b2d.py+agent_corpus/uniad_vad/Bench2DriveZoo/vad_b2d_base.pth` |
 | Simlingo   | Vision-Language-based | [Simlingo](https://github.com/RenzKa/simlingo)                                                        | `agent_corpus.simlingo.agent_simlingo:LingoAgent`     | `agent_corpus/simlingo/checkpoint/simlingo/checkpoints/epoch=013.ckpt/pytorch_model.pt` |
-| Orion      | Vision-Language-based | [Orion](https://github.com/xiaomi-mlab/Orion)                                                         | `agent_corpus.orion.orion_b2d_agent:OrionAgent`       | *Will be released soon*                                                     |
+| Orion      | Vision-Language-based | [Orion](https://github.com/xiaomi-mlab/Orion)                                                         | `agent_corpus.orion.orion_b2d_agent:OrionAgent`       | `agent_corpus/orion/adzoo/orion/configs/orion_stage3_agent.py+agent_corpus/orion/ckpts/Orion.pth`                                                   |
 | Pylot      | Module-based          | [pylot](https://github.com/erdos-project/pylot)                                                       | *Will be released soon*                              | *Will be released soon*                                                     |
 
 📌 See the [Agent Corpus](agents/README.md) for more details and instructions on integrating your own ADS.
 
+## 🔬 Fuzzing/Testing Tools
 
-## 🔬 Fuzzing Tools
-
-Drivora incorporates multiple fuzzers, each with different scenario definitions, mutation strategies, feedback, and oracles.
+Drivora incorporates multiple ADS fuzzers, each with different scenario definitions, mutation strategies, feedback, and oracles.
 
 ✅ **Currently Supported Tools**
-- [Random](fuzzer/open_scenario/random/README.md)  
-- [AVFuzzer](fuzzer/open_scenario/avfuzzer/README.md)  
-- [Behavexplor](fuzzer/open_scenario/behavexplor/README.md)  
-- [SAMOTA](fuzzer/open_scenario/samota/README.md)  
-- [DriveFuzz](fuzzer/open_scenario/drivefuzz/README.md)
+- [Random](fuzzer/open_scenario/random)  
+- [AVFuzzer](fuzzer/open_scenario/avfuzzer)  
+- [Behavexplor](fuzzer/open_scenario/behavexplor)  
+- [SAMOTA](fuzzer/open_scenario/samota)  
+- [DriveFuzz](fuzzer/open_scenario/drivefuzz)
 - ... 🔄 more coming soon!
 
 ⚠️ **Note**: We cannot guarantee that the performance reproced by Drivora will be fully consistent with the results in the original papers, as different platforms may lead to variations.  Some components are still under development — we will continue to update the repository and address issues over time.
 
----
-
-## 🧩 Extension
+### 🧩 Extension
 
 To develop your own **search-based testing methods**, please refer to the provided examples and associated papers.
 
----
 
 ## ✅ TODO
 
 - [ ] Provide more detailed **documentation and tutorials**  
 - [ ] Release more testing methods
 - [ ] Release more ADSs
- 
-## 📬 Contact
-
-We welcome issues, suggestions, and collaboration opportunities.  
-
-**Mingfei Cheng**  
-📧 [snowbirds.mf@gmail.com](mailto:snowbirds.mf@gmail.com)
-
----
 
 ## 🤝 Contributing
 
 Contributions of all kinds are welcome!  
+We encourage opening an issue first for discussion. Once confirmed, you can submit a Pull Request.  
+
 1. Fork this repository  
 2. Create a new branch  
 3. Commit and push your changes  
 4. Open a Pull Request  
 
----
 
 ## 📖 Citation
 
-If you use Drivora in your work, please cite:
+If you use **Drivora** in your work, please cite the framework and the corresponding testing methods:
 
 ```bibtex
 @article{cheng2024drivetester,
@@ -270,8 +215,8 @@ If you use Drivora in your work, please cite:
   year      = {2025}
 }
 ```
+📌 We will provide an improved .bib file for easier citation in the future. Thank you!
 
----
 
 ## Acknowledgements
 
@@ -281,7 +226,10 @@ We would like to acknowledge the following open-source projects and communities 
 - [CARLA ScenarioRunner](https://github.com/carla-simulator/scenario_runner)
 - [CARLA Leaderboard](https://github.com/carla-simulator/leaderboard)
 
-## 📝 License
+## 📝 Contact & License
+
+We welcome issues, suggestions, and collaboration opportunities.  
+For inquiries, please contact **Mingfei Cheng** at [snowbirds.mf@gmail.com](mailto:snowbirds.mf@gmail.com).  
 
 This project is licensed under the [MIT License](LICENSE).  
 © 2024 Mingfei Cheng

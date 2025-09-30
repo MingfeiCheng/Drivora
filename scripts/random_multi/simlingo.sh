@@ -15,9 +15,9 @@ distribute_num=2  # Number of distributed execution instances
 carla_image="carlasim/carla:0.9.15"
 
 # ==== Agent Config ====
-agent_name="orion"
-agent_entry_point="agent_corpus.orion.orion_b2d_agent:OrionAgent"
-agent_config_path="agent_corpus/orion/adzoo/orion/configs/orion_stage3_fp16.py+agent_corpus/orion/ckpts/Orion.pth"
+agent_name="simlingo"
+agent_entry_point="agent_corpus.simlingo.agent_simlingo:LingoAgent"
+agent_config_path="agent_corpus/simlingo/checkpoint/simlingo/checkpoints/epoch=013.ckpt/pytorch_model.pt"
 
 # ==== Scenario Config ====
 seed_segment="route_100_200"
@@ -26,8 +26,8 @@ scenario_type="open_scenario"
 scenario_seed_path="scenario_datasets/open_scenario/0.9.15/${seed_segment}/${seed_id}.json"
 
 # ==== Tester Config ====
-tester_type="random"
-tester_config_path="fuzzer/open_scenario/random/configs/open_scenario.yaml"
+tester_type="random_multi"
+tester_config_path="fuzzer/open_scenario/random_multi/configs/open_scenario.yaml"
 
 run_tag="${tester_type}_${agent_name}_${seed_segment}_${seed_id}_run${run_index}"
 

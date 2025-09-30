@@ -26,8 +26,8 @@ scenario_type="open_scenario"
 scenario_seed_path="scenario_datasets/open_scenario/0.9.15/${seed_segment}/${seed_id}.json"
 
 # ==== Tester Config ====
-tester_type="random"
-tester_config_path="fuzzer/open_scenario/random/configs/open_scenario.yaml"
+tester_type="behavexplor"
+tester_config_path="fuzzer/open_scenario/behavexplor/configs/open_scenario.yaml"
 
 run_tag="${tester_type}_${agent_name}_${seed_segment}_${seed_id}_run${run_index}"
 

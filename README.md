@@ -230,6 +230,9 @@ If you use **Drivora** in your work, please cite the framework and the correspon
 ```
 📌 We will provide an improved .bib file for easier citation in the future. Thank you!
 
+## ❤️ Sponsorship
+
+If you find this project useful for research or development, consider supporting it via GitHub Sponsors.
 
 ## Acknowledgements
 

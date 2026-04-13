@@ -1,176 +1,205 @@
 # Architecture
 
-## System Overview
-
-```
-start_fuzzer.py                        # Entry point (Hydra config)
-  ├── discover_modules()               # Auto-register all fuzzers/managers
-  ├── Fuzzer (runner_base)             # Base class with all infrastructure
-  │     ├── RandomSampler              # Initial scenario sampling
-  │     ├── ScenarioOracle             # Safety evaluation (8 criteria)
-  │     ├── FeedbackCalculator         # Fitness scoring (per-fuzzer)
-  │     └── _run()                     # Main loop (overridden by each fuzzer)
-  │           └── execute_population() # Launch subprocess(es)
-  │                 └── run_scenario.py
-  │                       └── ScenarioManager
-  │                             ├── OpenScenario (behavior tree)
-  │                             ├── Agent (ADS under test)
-  │                             └── Criteria (runtime monitors)
-  └── save_checkpoint()                # Persist state for resume
-```
-
-## Two-Process Architecture
-
-Drivora uses a **two-process architecture** for robustness:
-
-1. **Fuzzer process** (tester venv): Runs the fuzzing loop, scenario sampling, and evaluation. Uses `.venvs/random/bin/python`.
-
-2. **Scenario subprocess** (ADS venv): Executes each scenario in an isolated subprocess. Uses `.venvs/<agent>/bin/python`. This ensures:
-   - CARLA crashes (segfaults) don't kill the fuzzer
-   - Different Python/torch versions per agent
-   - Clean isolation between fuzzer and ADS dependencies
-
-For container-based agents (e.g., Pylot), there is a third component:
-
-3. **Agent container** (Docker): Runs heavy inference (ERDOS + TF). The proxy agent in the subprocess communicates via ZMQ.
-
-## Fuzzer Architecture
-
-All fuzzers inherit from `Fuzzer` (runner_base.py) and share:
-- Scenario execution pipeline (`execute_population`)
-- Oracle + feedback evaluation
-- Checkpoint save/load with extensible hooks
-- Container lifecycle management
-- DEAP toolbox integration
-
-```
-Fuzzer (base)
-  ├── RandomFuzzer          # Random sampling each generation
-  ├── AVFuzzer              # GA: crossover + mutation + roulette/top2 + restart + LIS
-  ├── BehAVExplor           # Coverage-guided: KMeans behavior model + energy selection
-  ├── SAMOTAFuzzer          # Surrogate-assisted: ensemble models + global/local search
-  └── RandomMultiFuzzer     # Multi-ego: same ADS on multiple vehicles
-```
-
-### RandomFuzzer
-- **Mutation**: re-sample entirely from `RandomSampler`
-- **Selection**: random
-- **Feedback**: collision proximity (single objective)
-
-### AVFuzzer
-- **Crossover**: swap one NPC between two parent scenarios
-- **Mutation**: perturb one NPC's speed or trigger time
-- **Selection**: roulette wheel (fitness-proportional)
-- **Restart**: if no progress for N generations, re-initialize population
-- **LIS**: local iterative search around global best with boosted mutation rate
-- **Feedback**: composite (collision + stuck + destination)
-- **IDs**: `global_gen_N_ind_I` / `local_gen_N_lis_L_ind_I`
-
-### BehAVExplor
-- **Phase 1**: Random sampling to build initial corpus
-- **Phase 2**: Coverage-guided fuzzing with energy-based seed selection
-- **Coverage**: KMeans clustering on ego behavior time series (velocity, acceleration, yaw, control)
-- **Mutation**: energy-driven (high energy → small perturbation, low → large resample)
-- **Corpus update**: add seed if new coverage or better safety score
-- **Feedback**: safety score + diversity score (coverage distance)
-
-### SAMOTA
-- **Phase 1**: Random sampling to build database
-- **Phase 2**: Train ensemble surrogate models (RBF + Kriging + Polynomial Regression) per objective
-- **Global Search**: Surrogate-guided NSGA-II to find promising candidate vectors
-- **Local Search**: HDBSCAN clustering + per-cluster RBF + local GA
-- **Candidate → Scenario**: find nearest scenario in database, apply AVFuzzer-style perturbation
-- **Objectives**: 6 binary objectives (DfC, DfV, DfP, DfM, DT, Dest) with continuous values for surrogate training
-- **Feedback**: per-type collision distances + lane/traffic/destination checks
-
-### RandomMultiFuzzer
-- Same as RandomFuzzer but `ego_space.num` can be > 1
-- **Feedback**: per-ego metrics + ego-to-ego minimum distance
-
-## Key Modules
-
-### `fuzzer/runner_base.py` — Fuzzer Base Class
-Provides all reusable infrastructure:
-- DEAP toolbox setup
-- Checkpoint save/load with extensible hooks (`_get_checkpoint_data`, `_restore_checkpoint_data`)
-- Scenario execution via subprocess (`execute_population`)
-- Oracle + feedback evaluation pipeline (`execute_evaluate`)
-- Container lifecycle management
-- Stall detection (kill stuck subprocesses)
-- Time budget management with early termination
-
-### `fuzzer/mutator/` — Mutation Operators
-- `random_sample.py` — `RandomSampler`: samples scenarios from `ScenarioODDSpace`. Supports multi-ADS (list of entry_points). Auto-generates map cache from town name.
-- `avfuzzer_mutator.py` — `AVFuzzerMutator`: perturbation-based mutation (speeds, triggers, weather, traffic lights)
-- `behavior_mutator.py` — `ScenarioMutator`: small (perturb) / large (resample) mutation for BehAVExplor
-
-### `fuzzer/feedback/` — Feedback Calculators
-| Calculator | Used By | Objectives |
-|---|---|---|
-| `RandomFeedbackCalculator` | Random, RandomMulti | Collision proximity (single) |
-| `AVFuzzerFeedbackCalculator` | AVFuzzer | Collision + stuck + destination (composite) |
-| `BehaviorFeedbackCalculator` | BehAVExplor | Safety score + diversity score |
-| `SAMOTAFeedbackCalculator` | SAMOTA | 6 objectives: DfC, DfV, DfP, DfM, DT, Dest |
-| `MultiADSFeedbackCalculator` | RandomMulti | Per-ego + ego-ego distance |
-
-### `fuzzer/misc/` — Algorithm-specific models
-- `behavior_model.py` — KMeans coverage model for BehAVExplor
-- `surrogate_models.py` — RBF, Kriging, Polynomial Regression, Ensemble for SAMOTA
-- `samota_utils.py` — NSGA-II helpers, archive management, global/local search
-
-### `fuzzer/oracle/general_oracle.py` — Scenario Oracle
-Evaluates all 8 safety criteria per actor:
-- Runtime criteria from `scenario_elements/criteria/`
-- Offline collision recheck via 2D bounding-box intersection
-- Returns `expected=True` if any safety violation occurred
-
-### `scenario_runner/scenario_manager.py` — Scenario Execution
-- Loads CARLA world, spawns actors, sets up agent
-- Runs simulation tick loop
-- Collects observation data and criteria results
-- **Always saves observation + video** (even on error/timeout — moved to `stop()`)
-- Handles CARLA connection loss gracefully
-
-### `agent_corpus/atomic/base_agent.py` — Agent Base Class
-All agents inherit from `AutonomousAgent`:
-- `setup_env()`: Binds vehicle, sets up `internal_save_dir`
-- `setup()`: Agent-specific initialization
-- `sensors()`: Define required sensors
-- `run_step()`: Generate control output per tick
-- `set_global_plan()`: Receive route from scenario
-
-### `agent_corpus/pylot/` — Container-Based Agent
-- `pylot_proxy_agent.py`: Host-side ZMQ client, auto-manages Docker container lifecycle
-- `source_code/pylot_server.py`: Container-side ZMQ server wrapping ERDOS pipeline
-- Multi-ego support: per-ego container name + port auto-derived from ego ID
-
 ## Data Flow
 
+Drivora uses a **two-process architecture**: the fuzzer runs in a main process, and each scenario is executed in an isolated subprocess with the ADS agent's own Python environment.
+
 ```
-Fuzzer                    Subprocess                    Container (Pylot only)
-  │                          │                              │
-  ├─ sample scenario ──────> │                              │
-  │  (via CARLA container)   │                              │
-  │                          │                              │
-  ├─ write scenario.json ──> │                              │
-  ├─ write ctn_config.json > │                              │
-  │                          │                              │
-  ├─ launch subprocess ────> ├─ load scenario               │
-  │  (ads venv python)       ├─ connect to CARLA            │
-  │                          ├─ spawn actors + agent         │
-  │                          │   └─ PylotProxy.setup() ───> ├─ docker run (auto)
-  │                          │      (ZMQ connect)            ├─ ERDOS pipeline init
-  │                          ├─ run simulation loop          │
-  │                          │   └─ run_step():              │
-  │                          │      pack sensors ──ZMQ────> ├─ FasterRCNN detect
-  │                          │      control <──ZMQ────────  ├─ Track → Predict
-  │                          │                              ├─ Plan → PID
-  │                          ├─ write result.json            │
-  │                          ├─ write observation.jsonl.gz   │
-  │                          └─ write simulation_status.txt  │
-  │                          │                              │
-  ├─ read results <──────────┘                              │
-  ├─ oracle.evaluate()                                      │
-  ├─ feedback.evaluate()                                    │
-  └─ save checkpoint                                        │
+                            CARLA Container
+                           ┌──────────────┐
+                           │  CARLA Server │
+                           │  (Docker)     │
+                           └──────┬───────┘
+                                  │ TCP
+                ┌─────────────────┼──────────────────────┐
+                │                 │                       │
+     ┌──────────┴──────────┐     │     ┌─────────────────┴─────────────┐
+     │  Fuzzer Process      │     │     │  Scenario Subprocess          │
+     │  (.venvs/random)     │     │     │  (.venvs/<agent>)             │
+     │                      │     │     │                               │
+     │  1. Sample scenario ─┼─────┘     │  4. ScenarioManager           │
+     │     (connect CARLA,  │           │     ├─ load world             │
+     │      sample routes,  │           │     ├─ spawn ego + NPCs       │
+     │      cleanup)        │           │     ├─ setup Agent            │
+     │                      │           │     ├─ run tick loop:         │
+     │  2. Write files: ────┼──────────►│     │   Agent.run_step()      │
+     │     scenario.json    │           │     │   Criteria.check()      │
+     │     ctn_config.json  │           │     │   record observation    │
+     │                      │           │     └─ stop():                │
+     │  3. Launch subprocess┼──────────►│        save result.json       │
+     │     (Popen, ads venv)│           │        save observation.gz    │
+     │                      │           │        save video             │
+     │  5. Read results: ◄──┼───────────┤                               │
+     │     result.json      │           └───────────────────────────────┘
+     │     observation.gz   │
+     │                      │
+     │  6. Oracle.evaluate()│
+     │  7. Feedback.evaluate│
+     │  8. Update population│
+     │  9. Save checkpoint  │
+     └─────────────────────┘
 ```
+
+**Why two processes?**
+- CARLA segfaults don't kill the fuzzer
+- Each agent can have its own Python/torch version
+- Clean isolation between fuzzer and ADS dependencies
+- Stall detection: fuzzer kills stuck subprocesses automatically
+
+## Fuzzer Loop (Main Process)
+
+Each fuzzer inherits from `Fuzzer` (runner_base.py) and implements `_run()`:
+
+```
+_run(start_time):
+  while not termination_check():
+    ┌─────────────────────────────────────────────────┐
+    │ 1. Generate scenarios                            │
+    │    (sample / mutate / surrogate-guided search)   │
+    │                                                  │
+    │ 2. execute_evaluate(batch)     ← base class      │
+    │    ├─ execute_population()     ← launches Popen  │
+    │    │    writes scenario.json + ctn_config.json   │
+    │    │    waits for result.json + timeout/stall    │
+    │    ├─ oracle.evaluate()        ← 8 safety checks │
+    │    ├─ feedback.evaluate()      ← fitness score   │
+    │    └─ assign_feedback_to_ind() ← DEAP fitness    │
+    │                                                  │
+    │ 3. Update population / corpus / archive          │
+    │ 4. save_checkpoint()                             │
+    └─────────────────────────────────────────────────┘
+```
+
+All fuzzers share steps 2-4 via the base class. Only step 1 (generation strategy) differs:
+
+| Fuzzer | Generation Strategy |
+|--------|-------------------|
+| Random | Re-sample from `ScenarioODDSpace` each generation |
+| AVFuzzer | GA: crossover (swap NPC) + mutation (perturb speed/trigger) + roulette selection + restart + LIS |
+| BehAVExplor | Energy-based seed selection + small/large mutation + KMeans coverage model |
+| SAMOTA | Ensemble surrogate (RBF+PR+Kriging) → NSGA-II global search + HDBSCAN local search → nearest-scenario mutation |
+| RandomMulti | Same as Random but with `ego_space.num > 1` |
+
+## Scenario Execution (Subprocess)
+
+Each scenario runs in a subprocess via `ScenarioManager`:
+
+```
+ScenarioManager.run():
+  1. Load CARLA world (or reuse if same town)
+  2. Build scenario tree (OpenScenario behavior tree):
+     ├─ EgoVehicle behaviors (route following)
+     ├─ NPC vehicle behaviors (waypoint following)
+     ├─ Walker behaviors (AI navigation)
+     ├─ Static obstacles
+     ├─ Traffic light control
+     └─ Weather setup
+  3. Setup ADS agent:
+     ├─ load_entry_point("agent_corpus.roach.agent:RoachAgent")
+     ├─ agent.set_global_plan(route)
+     ├─ agent.setup_env(ego_id, vehicle, ctn_operator, config)
+     └─ AgentWrapper.setup_sensors()
+  4. Tick loop:
+     for each CARLA tick:
+       ├─ agent.run_step(sensor_data, timestamp) → control
+       ├─ ego.apply_control(control)
+       ├─ scenario_tree.tick() (NPC behaviors + criteria)
+       └─ record observation frame
+  5. stop():
+     ├─ cleanup sensors, agents, actors
+     ├─ analyze_scenario() → result.json
+     ├─ save observation.jsonl.gz (always, even on error)
+     └─ save video
+```
+
+## Scenario Configuration
+
+Each scenario is defined by `ScenarioConfig` (Pydantic model):
+
+```
+ScenarioConfig
+├── ego_vehicles: List[EgoConfig]
+│   ├── route: List[Waypoint]          # x, y, z, pitch, yaw, roll, speed
+│   ├── entry_point: str               # "agent_corpus.roach.agent:RoachAgent"
+│   ├── config_path: str               # agent config file
+│   └── trigger_time: float            # when to start
+├── npc_vehicles: List[WaypointVehicleConfig]
+│   ├── route: List[Waypoint]          # NPC route with speeds
+│   └── trigger_time: float
+├── npc_walkers: List[AIWalkerConfig]
+├── npc_statics: List[StaticObstacleConfig]
+├── weather: WeatherConfig             # 10 parameters
+├── traffic_light: TrafficLightBehaviorConfig
+└── map_region: MapConfig              # town + region bounds
+```
+
+The fuzzer mutates these parameters. Map cache (driving waypoints, routes) is shared per town: `cache/<town>_map_cache.json`.
+
+## Safety Evaluation Pipeline
+
+```
+Scenario results
+       │
+       ▼
+  ScenarioOracle.evaluate()
+  ├─ Runtime criteria (from scenario_elements/criteria/):
+  │   collision, stuck, offroad, overspeed,
+  │   running_stop, running_red_light, wrong_lane, reach_destination
+  ├─ Offline collision recheck (2D bbox intersection)
+  └─ → oracle_result: { expected: bool, criteria_summary: {...} }
+       │
+       ▼
+  FeedbackCalculator.evaluate()
+  ├─ Extracts continuous metrics from observation + oracle_result
+  ├─ Computes fitness score(s)
+  └─ → feedback_result: { score, details, ... }
+```
+
+Each fuzzer uses its own feedback calculator:
+
+| Feedback | Objectives | Used By |
+|----------|-----------|---------|
+| `RandomFeedbackCalculator` | Collision proximity (single) | Random, RandomMulti |
+| `AVFuzzerFeedbackCalculator` | Collision + stuck + destination (composite) | AVFuzzer |
+| `BehaviorFeedbackCalculator` | Safety score + diversity score (coverage) | BehAVExplor |
+| `SAMOTAFeedbackCalculator` | 6 per-type objectives: DfC, DfV, DfP, DfM, DT, Dest | SAMOTA |
+| `MultiADSFeedbackCalculator` | Per-ego + ego-ego distance | RandomMulti |
+
+## Checkpoint & Resume
+
+All fuzzers save state after each generation via `save_checkpoint()`:
+
+```
+results/<run_tag>/
+├── tmp/
+│   ├── checkpoint.pkl          # full fuzzer state (extensible per fuzzer)
+│   ├── time_counter.txt        # accumulated wall-clock time
+│   └── ensembles/              # SAMOTA: cached surrogate models
+├── results/
+│   └── <scenario_id>/         # per-scenario outputs
+├── overview.json               # summary of all seeds
+└── logbook.json                # per-generation metrics
+```
+
+Base class provides hooks: `_get_checkpoint_data()` / `_restore_checkpoint_data()`. Each fuzzer extends these to save its own state (population, archive, coverage model, surrogates, etc.).
+
+## Key Source Files
+
+| File | Role |
+|------|------|
+| `start_fuzzer.py` | Entry point (Hydra config + registry discovery) |
+| `fuzzer/runner_base.py` | Base class: execution, evaluation, checkpoint, container management |
+| `fuzzer/runner_*.py` | Per-fuzzer implementations |
+| `fuzzer/mutator/random_sample.py` | Scenario sampling from `ScenarioODDSpace` |
+| `fuzzer/mutator/avfuzzer_mutator.py` | Perturbation mutation (speed, trigger, weather) |
+| `fuzzer/mutator/behavior_mutator.py` | Small/large mutation for BehAVExplor |
+| `fuzzer/feedback/*.py` | Per-fuzzer fitness calculators |
+| `fuzzer/oracle/general_oracle.py` | 8-criteria safety oracle + collision recheck |
+| `fuzzer/misc/surrogate_models.py` | RBF, Kriging, PR, Ensemble (SAMOTA) |
+| `fuzzer/misc/behavior_model.py` | KMeans coverage model (BehAVExplor) |
+| `fuzzer/misc/samota_utils.py` | NSGA-II, archive, global/local search (SAMOTA) |
+| `scenario_runner/scenario_manager.py` | CARLA scenario execution + observation recording |
+| `scenario_runner/ctn_operator.py` | Docker container lifecycle for CARLA |
+| `scenario_corpus/openscenario/` | Scenario tree + config models |
+| `scenario_elements/criteria/` | Runtime safety monitors (8 types) |
+| `agent_corpus/atomic/base_agent.py` | Agent base class (`AutonomousAgent`) |

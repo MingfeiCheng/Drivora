@@ -329,12 +329,12 @@ def generate_offspring(parent_pop: list, objectives: list, lb: list, ub: list) -
 #  Evaluate with ensemble
 # ═══════════════════════════════════════════════════════════════════════════
 
-def evaluate_with_ensembles(ensembles: List[EnsembleSurrogate], candidates: list):
+def evaluate_with_ensembles(ensembles: List[EnsembleSurrogate], candidates: list,
+                            n_objectives: int = 6):
     """Evaluate candidates using ensemble surrogate models."""
-    n_obj = len(ensembles)
     for candidate in candidates:
-        obj_vals = [1.0] * n_obj
-        unc_vals = [0.0] * n_obj
+        obj_vals = [1.0] * n_objectives
+        unc_vals = [0.0] * n_objectives
         for ens in ensembles:
             idx = ens.objective_index
             pred, unc = ens.predict(np.array(candidate.get_features()))
@@ -377,7 +377,7 @@ def global_search(database: list, objective_uncovered: list, pop_size: int,
 
     # Initialize population
     P = generate_random_candidates(pop_size, lb, ub)
-    evaluate_with_ensembles(ensembles, P)
+    evaluate_with_ensembles(ensembles, P, n_objectives)
 
     T_b = [None] * n_objectives  # best per objective
     T_n = [None] * n_objectives  # most uncertain per objective
@@ -385,7 +385,7 @@ def global_search(database: list, objective_uncovered: list, pop_size: int,
     logger.info(f"[GS] Running NSGA-II for {n_generations} generations (pop_size={pop_size})...")
     for gen in range(n_generations):
         Q = generate_offspring(P, objective_uncovered, lb, ub)
-        evaluate_with_ensembles(ensembles, Q)
+        evaluate_with_ensembles(ensembles, Q, n_objectives)
 
         R = P + Q
 

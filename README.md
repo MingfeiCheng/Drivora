@@ -51,6 +51,7 @@ If you find **Drivora** useful, please consider giving it a star on GitHub!
 ## Prerequisites
 
 - Python >= 3.8
+- [uv](https://github.com/astral-sh/uv) — fast Python package manager (install: `curl -LsSf https://astral.sh/uv/install.sh | sh`)
 - [CARLA](https://carla.org/) >= 0.9.12
 - [Docker](https://www.docker.com/) with NVIDIA Container Toolkit
 - CUDA 11.x or 12.x
@@ -62,6 +63,9 @@ If you find **Drivora** useful, please consider giving it a star on GitHub!
 ### Install
 
 ```bash
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
 git clone https://github.com/MingfeiCheng/Drivora.git
 cd Drivora
 
@@ -175,16 +179,7 @@ python start_fuzzer.py tester.type="avfuzzer" tester.config_path="fuzzer/configs
 
 ## Pylot (Container-Based Agent)
 
-Pylot runs inside a Docker container with ERDOS dataflow + TensorFlow. The host-side `PylotProxyAgent` communicates via ZMQ:
-
-```
-Host (ScenarioManager)              Docker Container
-┌──────────────────┐               ┌──────────────────┐
-│ PylotProxyAgent   │  ZMQ REQ/REP │ PylotServer       │
-│ (sensor → JPEG)  ├──────────────►│ (ERDOS pipeline)  │
-│ (control ← back) │◄──────────────┤ (FasterRCNN,etc.) │
-└──────────────────┘               └──────────────────┘
-```
+Pylot uses a Docker container for its ERDOS dataflow pipeline. See [agent_corpus/pylot/README.md](agent_corpus/pylot/README.md) for architecture details.
 
 ```bash
 # Install proxy + build Docker image
@@ -193,8 +188,6 @@ bash install_ads_eval.sh pylot 0.9.15 .venvs/pylot
 # Run (container auto-starts)
 bash scripts/random/pylot.sh
 ```
-
-Multi-ego support: each ego gets its own container with unique port (auto-derived from ego ID).
 
 
 ## Scenario Definition
@@ -221,11 +214,11 @@ Each scenario defines: ego vehicle routes, NPC vehicles, AI walkers, static obst
 If you use **Drivora** in your work, please cite:
 
 ```bibtex
-@article{cheng2024drivetester,
-  title     = {Drivetester: A unified platform for simulation-based autonomous driving testing},
-  author    = {Cheng, Mingfei and Zhou, Yuan and Xie, Xiaofei},
-  journal   = {arXiv preprint arXiv:2412.12656},
-  year      = {2024}
+@article{cheng2026drivora,
+  title     = {Drivora: A Unified and Extensible Infrastructure for Search-based Autonomous Driving Testing},
+  author    = {Cheng, Mingfei and Briand, Lionel and Zhou, Yuan},
+  journal   = {arXiv preprint arXiv:2601.05685},
+  year      = {2026}
 }
 ```
 

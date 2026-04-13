@@ -83,7 +83,7 @@ def main(cfg: DictConfig):
     fuzzer_class = FUZZER_REGISTRY.get(f"fuzzer.{fuzzer_type}")
     logger.info(f'Load fuzzer class from: {fuzzer_class}')
     
-    # we set global testing ads conda env & eval scripts
+    # set global ADS venv & eval scripts
     GlobalConfig.ads_venv_dir = agent_config.ads_venv_dir
     GlobalConfig.scenario_executor_script = scenario_config.executor_script
 

@@ -3,12 +3,14 @@
 ## Prerequisites
 
 - **Python** >= 3.8
+- **[uv](https://github.com/astral-sh/uv)** — fast Python package manager
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
 - **Docker** with NVIDIA Container Toolkit (`nvidia-docker`)
 - **CUDA** 11.x or 12.x (with `nvcc` available)
 - **Git LFS** (for downloading large model checkpoints)
 - **GPU**: NVIDIA GPU with >= 16GB VRAM (tested on A5000, L40S)
-
-> Drivora uses [uv](https://github.com/astral-sh/uv) for Python environment management. It will be installed automatically if not present.
 
 ## Quick Install (All Agents)
 

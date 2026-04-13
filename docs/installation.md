@@ -104,7 +104,6 @@ At runtime, the `PylotProxyAgent` auto-starts/stops the container. Multi-ego sce
 
 | CARLA Version | Python | Install Method |
 |--------------|--------|---------------|
-| 0.9.10 / 0.9.10.1 | 3.8 | Egg registration (`pkgs/carla-0.9.10-py3.7-linux-x86_64.egg`) |
 | >= 0.9.12 | 3.8 | `uv pip install carla==<version>` |
 | 0.9.15 (recommended) | 3.8 | `uv pip install carla==0.9.15` |
 
@@ -118,12 +117,6 @@ Agents that compile CUDA C++ extensions (Orion, UniAD/VAD) automatically detect 
 All other agents use `torch+cu118` which is compatible with both CUDA 11 and 12 at runtime.
 
 ## Troubleshooting
-
-### `libtiff.so.5: cannot open shared object file`
-System has `libtiff.so.6` but CARLA 0.9.10 egg needs `.so.5`:
-```bash
-sudo ln -sf /usr/lib/x86_64-linux-gnu/libtiff.so.6 /usr/lib/x86_64-linux-gnu/libtiff.so.5
-```
 
 ### `No module named 'carla'`
 The CARLA Python API was not installed. Re-run the install script or manually:

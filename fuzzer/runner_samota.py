@@ -80,8 +80,8 @@ class SAMOTAFuzzer(Fuzzer):
         self.initial_db_size = self.pipeline_config.get('initial_db_size', 6)
         self.gs_pop_size = self.pipeline_config.get('gs_pop_size', 6)
         self.gs_generations = self.pipeline_config.get('gs_generations', 100)
-        default_thresholds = [0.1, 0.0, 0.0, 0.0, 0.0, 0.1]
-        self.thresholds = self.pipeline_config.get('thresholds', default_thresholds)
+        default_thresholds = [0.1] * N_OBJECTIVES
+        self.thresholds = list(self.pipeline_config.get('thresholds', default_thresholds))
 
         # Internal state
         self.database_vectors = []     # list of (feature_vector, objective_values)

@@ -9,9 +9,12 @@ gs_generations: 100          # number of GA generations in Global Search
 # Archive thresholds (objective value at which we consider it "covered")
 # Lower = stricter. 0.0 = only collision/stuck/destination actually happened
 thresholds:
-  - 0.1    # collision proximity (normalized 0-1)
-  - 0.1    # stuck duration (normalized 0-1)
-  - 0.1    # destination distance (normalized 0-1)
+  - 0.1    # DfC: lane center
+  - 0.1    # DfV: vehicle collision proximity
+  - 0.1    # DfP: pedestrian collision proximity
+  - 0.1    # DfM: static collision proximity
+  - 0.1    # DT:  traffic rules
+  - 0.1    # Dest: destination distance
 
 feedback:
   scale_vehicle: 10.0       # DfV normalization

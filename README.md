@@ -63,32 +63,43 @@ If you find **Drivora** useful, please consider giving it a star on GitHub!
 ### Install
 
 ```bash
-# Install uv (if not already installed)
+# 1. Install uv (if not already installed)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
+# 2. Clone and install everything
 git clone https://github.com/MingfeiCheng/Drivora.git
 cd Drivora
-
-# Install all agents + tester (CARLA 0.9.15)
 bash install_all.sh
+```
 
-# Or install individually
+To install a specific agent or tester individually:
+
+```bash
+# Install one ADS agent
 bash install_ads_eval.sh roach 0.9.15 .venvs/roach
+
+# Install one tester (fuzzer)
 bash install_tester.sh random 0.9.15 .venvs/random
 
-# Skip large checkpoint downloads
-SKIP_DOWNLOAD=1 bash install_all.sh
+# Skip large checkpoint downloads (install deps only)
+SKIP_DOWNLOAD=1 bash install_ads_eval.sh roach 0.9.15 .venvs/roach
 ```
+
+See [docs/installation.md](docs/installation.md) for detailed instructions and troubleshooting.
 
 ### Run
 
 ```bash
+# Quick demo (random fuzzer + Roach agent)
 bash scripts/demo_roach.sh
+
+# Run a specific fuzzer on a specific agent
+bash scripts/avfuzzer/roach.sh
+bash scripts/samota/interfuser.sh
+bash scripts/behavexplor/transfuser.sh
 ```
 
-Results are saved to `results/debug_roach/roach_random_debug/`.
-
-See [docs/installation.md](docs/installation.md) for detailed installation instructions and [docs/usage.md](docs/usage.md) for usage guide.
+Results are saved to `results/<fuzzer>_<agent>/`. See [docs/usage.md](docs/usage.md) for parameters and results structure.
 
 
 ## Directory Structure
@@ -132,22 +143,22 @@ Drivora/
 
 ## ADS Corpus
 
-**11 ADS agents** supported, covering end-to-end, vision-language, module-based, and container-based systems:
+**12 ADS agents** supported, covering end-to-end, vision-language, module-based, and container-based systems:
 
-| Agent | Type | Entry Point | Repository |
-|-------|------|-------------|------------|
-| Roach | End-to-End | `agent_corpus.roach.agent:RoachAgent` | [carla-roach](https://github.com/zhejz/carla-roach) |
-| InterFuser | End-to-End | `agent_corpus.interfuser.interfuser_agent:InterfuserAgent` | [InterFuser](https://github.com/opendilab/InterFuser) |
-| LAV | End-to-End | `agent_corpus.lav.lav_agent:LAVAgent` | [LAV](https://github.com/dotchen/LAV) |
-| TransFuser | End-to-End | `agent_corpus.transfuser.agent:HybridAgent` | [TransFuser](https://github.com/autonomousvision/transfuser) |
-| PlanT | End-to-End | `agent_corpus.plant.PlanT_agent:PlanTPerceptionAgent` | [PlanT](https://github.com/autonomousvision/plant) |
-| TCP | End-to-End | `agent_corpus.tcp_admlp.tcp_b2d_agent:TCPAgent` | [TCP](https://github.com/OpenDriveLab/TCP) |
-| ADMLP | End-to-End | `agent_corpus.tcp_admlp.admlp_b2d_agent:ADMLPAgent` | [AD-MLP](https://github.com/E2E-AD/AD-MLP) |
-| UniAD | End-to-End | `agent_corpus.uniad_vad.uniad_b2d_agent:UniadAgent` | [UniAD](https://github.com/OpenDriveLab/UniAD) |
-| VAD | End-to-End | `agent_corpus.uniad_vad.vad_b2d_agent:VadAgent` | [VAD](https://github.com/hustvl/VAD) |
-| Simlingo | Vision-Language | `agent_corpus.simlingo.agent_simlingo:LingoAgent` | [Simlingo](https://github.com/RenzKa/simlingo) |
-| Orion | Vision-Language | `agent_corpus.orion.orion_b2d_agent:OrionAgent` | [Orion](https://github.com/xiaomi-mlab/Orion) |
-| Pylot | Module-Based (Container) | `agent_corpus.pylot.pylot_proxy_agent:PylotProxyAgent` | [Pylot](https://github.com/erdos-project/pylot) |
+| Agent | Type | Repository | Drivora Doc |
+|-------|------|------------|-------------|
+| Roach | End-to-End | [carla-roach](https://github.com/zhejz/carla-roach) | [doc](agent_corpus/roach/README_drivora.md) |
+| InterFuser | End-to-End | [InterFuser](https://github.com/opendilab/InterFuser) | [doc](agent_corpus/interfuser/README_drivora.md) |
+| LAV | End-to-End | [LAV](https://github.com/dotchen/LAV) | [doc](agent_corpus/lav/README_drivora.md) |
+| TransFuser | End-to-End | [TransFuser](https://github.com/autonomousvision/transfuser) | [doc](agent_corpus/transfuser/README_drivora.md) |
+| PlanT | End-to-End | [PlanT](https://github.com/autonomousvision/plant) | [doc](agent_corpus/plant/README_drivora.md) |
+| TCP | End-to-End | [TCP](https://github.com/OpenDriveLab/TCP) | [doc](agent_corpus/tcp_admlp/README_drivora.md) |
+| ADMLP | End-to-End | [AD-MLP](https://github.com/E2E-AD/AD-MLP) | [doc](agent_corpus/tcp_admlp/README_drivora.md) |
+| UniAD | End-to-End | [UniAD](https://github.com/OpenDriveLab/UniAD) | [doc](agent_corpus/uniad_vad/README_drivora.md) |
+| VAD | End-to-End | [VAD](https://github.com/hustvl/VAD) | [doc](agent_corpus/uniad_vad/README_drivora.md) |
+| Simlingo | Vision-Language | [Simlingo](https://github.com/RenzKa/simlingo) | [doc](agent_corpus/simlingo/README_drivora.md) |
+| Orion | Vision-Language | [Orion](https://github.com/xiaomi-mlab/Orion) | [doc](agent_corpus/orion/README_drivora.md) |
+| Pylot | Module-Based (Container) | [Pylot](https://github.com/erdos-project/pylot) | [doc](agent_corpus/pylot/README_drivora.md) |
 
 
 ## Testing Tools
@@ -174,19 +185,6 @@ bash scripts/random_multi/roach.sh
 
 # Or use Hydra overrides directly
 python start_fuzzer.py tester.type="avfuzzer" tester.config_path="fuzzer/configs/debug_avfuzzer.yaml" ...
-```
-
-
-## Pylot (Container-Based Agent)
-
-Pylot uses a Docker container for its ERDOS dataflow pipeline. See [agent_corpus/pylot/README.md](agent_corpus/pylot/README.md) for architecture details.
-
-```bash
-# Install proxy + build Docker image
-bash install_ads_eval.sh pylot 0.9.15 .venvs/pylot
-
-# Run (container auto-starts)
-bash scripts/random/pylot.sh
 ```
 
 

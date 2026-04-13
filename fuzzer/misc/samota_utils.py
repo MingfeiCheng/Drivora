@@ -355,6 +355,8 @@ def global_search(database: list, objective_uncovered: list, pop_size: int,
     Returns: list of best candidates (T_b best per objective + T_n most uncertain).
     """
     # Train ensemble for each uncovered objective
+    logger.info(f"[GS] Training ensembles for {len(objective_uncovered)} uncovered objectives "
+                f"(database size={len(database)})...")
     ensembles = []
     for obj in objective_uncovered:
         X = np.array([c.get_features() for c in database])
@@ -362,12 +364,15 @@ def global_search(database: list, objective_uncovered: list, pop_size: int,
         ens = EnsembleSurrogate(objective_index=obj)
         try:
             ens.train(X, y)
+            logger.info(f"[GS] Ensemble obj={obj} trained — "
+                        f"weights: RBF={ens.w_rbf:.3f} PR={ens.w_poly:.3f} KR={ens.w_kriging:.3f}")
         except Exception as e:
-            logger.warning(f"Ensemble training failed for obj {obj}: {e}")
+            logger.warning(f"[GS] Ensemble training failed for obj {obj}: {e}")
             continue
         ensembles.append(ens)
 
     if not ensembles:
+        logger.warning("[GS] No ensembles trained, skipping global search.")
         return []
 
     # Initialize population
@@ -377,6 +382,7 @@ def global_search(database: list, objective_uncovered: list, pop_size: int,
     T_b = [None] * n_objectives  # best per objective
     T_n = [None] * n_objectives  # most uncertain per objective
 
+    logger.info(f"[GS] Running NSGA-II for {n_generations} generations (pop_size={pop_size})...")
     for gen in range(n_generations):
         Q = generate_offspring(P, objective_uncovered, lb, ub)
         evaluate_with_ensembles(ensembles, Q)
@@ -395,6 +401,11 @@ def global_search(database: list, objective_uncovered: list, pop_size: int,
         sorted_pop = preference_sort(R, pop_size, objective_uncovered)
         P = sorted_pop[:pop_size]
 
+        if (gen + 1) % 20 == 0 or gen == n_generations - 1:
+            best_vals = {obj: f"{T_b[obj].get_objective_value(obj):.4f}" if T_b[obj] else "N/A"
+                         for obj in objective_uncovered}
+            logger.info(f"[GS] Gen {gen+1}/{n_generations} — best per obj: {best_vals}")
+
     # Collect results
     results = []
     for c in T_b:
@@ -403,6 +414,7 @@ def global_search(database: list, objective_uncovered: list, pop_size: int,
     for c in T_n:
         if c is not None:
             results.append(c)
+    logger.info(f"[GS] Complete — returning {len(results)} candidates")
     return results
 
 
@@ -415,6 +427,8 @@ def local_search(database: list, objective_uncovered: list, lb: list, ub: list,
     """Run local search: cluster the database, train per-cluster RBF, run GA."""
     from fuzzer.misc.surrogate_models import RBFSurrogate
 
+    logger.info(f"[LS] Starting local search for {len(objective_uncovered)} objectives "
+                f"(database size={len(database)})...")
     results = []
     X_all = np.array([c.get_features() for c in database])
 
@@ -423,13 +437,15 @@ def local_search(database: list, objective_uncovered: list, lb: list, ub: list,
 
         # Cluster
         try:
-            clusterer = hdbscan.HDBSCAN(min_cluster_size=max(3, len(database) // n_clusters))
+            min_size = max(3, len(database) // n_clusters)
+            clusterer = hdbscan.HDBSCAN(min_cluster_size=min_size)
             labels = clusterer.fit_predict(X_all)
         except Exception:
             labels = np.zeros(len(X_all), dtype=int)
 
         unique_labels = set(labels)
         unique_labels.discard(-1)  # remove noise label
+        logger.info(f"[LS] Obj {obj}: {len(unique_labels)} clusters found")
 
         for label in unique_labels:
             mask = labels == label
@@ -468,4 +484,5 @@ def local_search(database: list, objective_uncovered: list, lb: list, ub: list,
             if best_fv is not None:
                 results.append(SamotaCandidate(best_fv))
 
+    logger.info(f"[LS] Complete — returning {len(results)} candidates")
     return results

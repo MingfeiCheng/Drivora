@@ -4,47 +4,69 @@
 
 Drivora uses a **two-process architecture**: the fuzzer runs in a main process, and each scenario is executed in an isolated subprocess with the ADS agent's own Python environment.
 
+### Overview
+
 ```
-                            CARLA Container
-                           ┌──────────────┐
-                           │  CARLA Server │
-                           │  (Docker)     │
-                           └──────┬───────┘
-                                  │ TCP
-                ┌─────────────────┼──────────────────────┐
-                │                 │                       │
-     ┌──────────┴──────────┐     │     ┌─────────────────┴─────────────┐
-     │  Fuzzer Process      │     │     │  Scenario Subprocess          │
-     │  (.venvs/random)     │     │     │  (.venvs/<agent>)             │
-     │                      │     │     │                               │
-     │  1. Sample scenario ─┼─────┘     │  4. ScenarioManager           │
-     │     (connect CARLA,  │           │     ├─ load world             │
-     │      sample routes,  │           │     ├─ spawn ego + NPCs       │
-     │      cleanup)        │           │     ├─ setup Agent            │
-     │                      │           │     ├─ run tick loop:         │
-     │  2. Write files: ────┼──────────►│     │   Agent.run_step()      │
-     │     scenario.json    │           │     │   Criteria.check()      │
-     │     ctn_config.json  │           │     │   record observation    │
-     │                      │           │     └─ stop():                │
-     │  3. Launch subprocess┼──────────►│        save result.json       │
-     │     (Popen, ads venv)│           │        save observation.gz    │
-     │                      │           │        save video             │
-     │  5. Read results: ◄──┼───────────┤                               │
-     │     result.json      │           └───────────────────────────────┘
-     │     observation.gz   │
-     │                      │
-     │  6. Oracle.evaluate()│
-     │  7. Feedback.evaluate│
-     │  8. Update population│
-     │  9. Save checkpoint  │
-     └─────────────────────┘
+┌─ Fuzzer Process (.venvs/random) ─────────────────────────────────────────┐
+│                                                                          │
+│   ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────────────┐   │
+│   │ Scenario │───►│ Execute  │───►│ Oracle   │───►│ Feedback         │   │
+│   │ Generate │    │ & Wait   │    │ Evaluate │    │ Evaluate + Update│   │
+│   └──────────┘    └────┬─────┘    └──────────┘    └──────────────────┘   │
+│        ▲               │                                    │            │
+│        │               │ Popen                              │            │
+│        │               ▼                                    ▼            │
+│        │    ┌─────────────────────┐               ┌────────────────┐     │
+│        │    │ scenario.json       │               │ Save Checkpoint│     │
+│        │    │ ctn_config.json     │               └────────────────┘     │
+│        │    └─────────┬───────────┘                                      │
+│        └──────────────┼──────────── next generation ─────────────────────│
+└───────────────────────┼──────────────────────────────────────────────────┘
+                        │
+                        ▼
+┌─ Scenario Subprocess (.venvs/<agent>) ───────────────────────────────────┐
+│                                                                          │
+│   ScenarioManager                                                        │
+│   ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────────────┐   │
+│   │ Load     │───►│ Spawn    │───►│ Tick     │───►│ Stop & Save      │   │
+│   │ World    │    │ Actors   │    │ Loop     │    │ results + obs    │   │
+│   └──────────┘    └──────────┘    └────┬─────┘    └──────────────────┘   │
+│                                        │                                 │
+│                                        ▼                                 │
+│                                  ┌───────────┐                           │
+│                                  │ ADS Agent │                           │
+│                                  │ run_step()│                           │
+│                                  └─────┬─────┘                           │
+│                                        │                                 │
+└────────────────────────────────────────┼─────────────────────────────────┘
+                                         │ CARLA API
+                                         ▼
+                                  ┌──────────────┐
+                                  │    CARLA     │
+                                  │   (Docker)   │
+                                  └──────────────┘
 ```
 
-**Why two processes?**
-- CARLA segfaults don't kill the fuzzer
-- Each agent can have its own Python/torch version
-- Clean isolation between fuzzer and ADS dependencies
-- Stall detection: fuzzer kills stuck subprocesses automatically
+### Step-by-Step
+
+| Step | Process | Action |
+|------|---------|--------|
+| 1 | Fuzzer | Generate scenario (sample routes via CARLA, then disconnect) |
+| 2 | Fuzzer | Write `scenario.json` + `ctn_config.json` to disk |
+| 3 | Fuzzer | Launch subprocess with ADS venv Python |
+| 4 | Subprocess | Load CARLA world, spawn ego + NPCs + walkers |
+| 5 | Subprocess | Setup ADS agent (`setup_env` → `setup` → `setup_sensors`) |
+| 6 | Subprocess | Run tick loop: `agent.run_step()` → `apply_control()` → criteria check |
+| 7 | Subprocess | `stop()`: save `result.json`, `observation.jsonl.gz`, video |
+| 8 | Fuzzer | Read results, run `oracle.evaluate()` + `feedback.evaluate()` |
+| 9 | Fuzzer | Update population / corpus / archive, save checkpoint |
+
+### Why Two Processes?
+
+- **Crash isolation**: CARLA segfaults don't kill the fuzzer
+- **Dependency isolation**: each agent has its own Python/torch version
+- **Stall detection**: fuzzer auto-kills stuck subprocesses
+- **Parallel execution**: multiple subprocesses on multiple CARLA containers
 
 ## Fuzzer Loop (Main Process)
 

@@ -17,7 +17,7 @@ class AtomicCondition(py_trees.behaviour.Behaviour):
         """
         Default init. Has to be called via super from derived class
         """
-        super(AtomicCondition, self).__init__(name)
+        super().__init__(name)
         self.logger.debug("%s.__init__()" % (self.__class__.__name__))
         self.name = name
 

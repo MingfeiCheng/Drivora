@@ -7,15 +7,14 @@ import operator
 
 from typing import List, Optional
 from pydantic import BaseModel, Field
-
-from ..atomic import AtomicBehavior
-from .agent import BehaviorWaypointAgent, get_basic_config
-
 from loguru import logger
+
+from ..atomic import AtomicBehavior, GameTime
+from .agent import BehaviorWaypointAgent, get_basic_config
 from scenario_elements.config import Waypoint
 
 class WaypointVehicleConfig(BaseModel):
-    
+
     id: str = Field(..., description="Unique identifier of the NPC vehicle")
     model: str = Field(..., description="Vehicle model name")
     rolename: str = Field(..., description="Role name, e.g., 'ego' or 'npc'")
@@ -27,10 +26,18 @@ class WaypointVehicleConfig(BaseModel):
     route: List[Waypoint] = Field(
         ..., description="List of waypoints describing the route"
     )
+    bounding_box: Optional[dict] = Field(
+        None, description="Bounding box dimensions and location offset"
+    )
+    ignore_traffic_lights: bool = Field(
+        False, description="If True, the vehicle ignores red traffic lights"
+    )
     
     def get_initial_waypoint(self) -> Waypoint:
         return self.route[0]
-    
+
+EPSILON = 0.001
+
 class WaypointVehicleBehavior(AtomicBehavior):
     """
     Behavior for NPC vehicles in the scenario.
@@ -41,6 +48,7 @@ class WaypointVehicleBehavior(AtomicBehavior):
         self, 
         actor: carla.Actor,
         actor_config: WaypointVehicleConfig,
+        stuck_timeout: float = 30.0,
         name: str = "WaypointVehicleBehavior"
     ):
         """
@@ -48,16 +56,19 @@ class WaypointVehicleBehavior(AtomicBehavior):
 
         :param vehicle: An instance of NPCVehicle that this behavior will control.
         """
-        super(WaypointVehicleBehavior, self).__init__(name, actor)
+        super().__init__(name, actor)
         
         self._actor_config = actor_config
         self._route = self._actor_config.route
         
         self._local_planner = None
         self._unique_id = 0
+        
+        self._stuck_timeout = stuck_timeout
+        self._last_moving_time = 0.0
 
     def initialise(self):
-        super(WaypointVehicleBehavior, self).initialise()
+        super().initialise()
         self._unique_id = int(round(time.time() * 1e9))
         try:
             # running_WF_actor_ -> update for terminate
@@ -72,14 +83,20 @@ class WaypointVehicleBehavior(AtomicBehavior):
             py_trees.blackboard.Blackboard().set("terminate_WF_actor_{}".format(self._actor.id), [], overwrite=True)
             py_trees.blackboard.Blackboard().set("running_WF_actor_{}".format(self._actor.id), [self._unique_id], overwrite=True)
 
+        if self._actor is None or not self._actor.is_alive:
+            return False
+
         self._apply_local_planner(self._actor)
+
+        self._last_moving_time = GameTime.get_time()
         return True
 
     def _apply_local_planner(self, actor: carla.Actor):
-
+        opt = get_basic_config()
+        opt["ignore_traffic_lights"] = self._actor_config.ignore_traffic_lights
         local_planner = BehaviorWaypointAgent(
             actor,
-            opt_dict=get_basic_config(),
+            opt_dict=opt,
             behavior='normal'
         )
         local_planner.set_global_plan(self._route, stop_waypoint_creation=False)
@@ -89,6 +106,9 @@ class WaypointVehicleBehavior(AtomicBehavior):
         """
         Compute next control step for the given waypoint plan, obtain and apply control to actor
         """
+        if self._actor is None or not self._actor.is_alive or self._local_planner is None:
+            return py_trees.common.Status.SUCCESS
+        
         new_status = py_trees.common.Status.RUNNING
 
         # self._global_tracker.update_agent(self._actor)
@@ -120,13 +140,21 @@ class WaypointVehicleBehavior(AtomicBehavior):
             #  replace access to private _waypoints_queue with public getter
             if not self._local_planner.is_task_finished():  # pylint: disable=protected-access
                 success = False
+            
 
-        if success :
-            current_velocity = self._actor.get_velocity()
-            current_speed = math.sqrt(current_velocity.x ** 2 + current_velocity.y ** 2 + current_velocity.z ** 2)
+        current_velocity = self._actor.get_velocity()
+        current_speed = math.sqrt(current_velocity.x ** 2 + current_velocity.y ** 2 + current_velocity.z ** 2) 
+        if success:
             if current_speed < 0.01:
                 new_status = py_trees.common.Status.SUCCESS
-
+                
+        # check stuck time -> remove actor if stuck for too long
+        if current_speed > EPSILON:
+            self._last_moving_time = GameTime.get_time()
+        else:
+            if GameTime.get_time() - self._last_moving_time > self._stuck_timeout:
+                new_status = py_trees.common.Status.SUCCESS
+                
         return new_status
 
     def terminate(self, new_status):
@@ -141,4 +169,4 @@ class WaypointVehicleBehavior(AtomicBehavior):
             control.brake = 1.0
             self._actor.apply_control(control)
 
-        super(WaypointVehicleBehavior, self).terminate(new_status)
+        super().terminate(new_status)

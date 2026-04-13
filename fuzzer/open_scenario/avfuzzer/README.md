@@ -1,3 +1,0 @@
-## AV-FUZZER: Finding Safety Violations in Autonomous Driving Systems
-
-The document will be updated ...

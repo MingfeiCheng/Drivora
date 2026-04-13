@@ -60,9 +60,7 @@ class ADMLPAgent(AutonomousAgent):
 		self.net.eval()
 
 		self.save_path = None
-		SAVE_PATH = os.path.join(self.scenario_dir, 'agent/internal')
-		# self.lat_ref, self.lon_ref = 42.0, 2.0
-		if SAVE_PATH is not None:
+		if self.internal_save_dir:
 			now = datetime.datetime.now()
 			# string = pathlib.Path(os.environ['ROUTES']).stem + '_'
 			# string += self.save_name
@@ -70,7 +68,7 @@ class ADMLPAgent(AutonomousAgent):
 
 			print (string)
 
-			self.save_path = pathlib.Path(SAVE_PATH) / string
+			self.save_path = pathlib.Path(self.internal_save_dir) / string
 			self.save_path.mkdir(parents=True, exist_ok=False)
 
 			(self.save_path / 'rgb').mkdir()
@@ -258,8 +256,9 @@ class ADMLPAgent(AutonomousAgent):
 		# 	return self.last_control
 		pred=self.net(result)
 		steer_traj, throttle_traj, brake_traj, metadata_traj = self.net.control_pid(pred, speed, target_point)
-		# if brake_traj < 0.05: brake_traj = 0.0
-		# if throttle_traj > brake_traj: brake_traj = 0.0
+
+		if brake_traj < 0.05: brake_traj = 0.0
+		if throttle_traj > brake_traj: brake_traj = 0.0
 
 		self.pid_metadata = metadata_traj
 		self.pid_metadata['agent'] = 'only_traj'
@@ -292,8 +291,9 @@ class ADMLPAgent(AutonomousAgent):
 		
 		metric_info = self.get_metric_info()
 		self.metric_info[self.step] = metric_info
-		if SAVE_PATH is not None and (self.step -  self.data_queue_len) % 1 == 0:
+		if self.save_path is not None and (self.step -  self.data_queue_len) % 1 == 0:
 			self.save(tick_data)
+		print(f"[ADMLP] step={self.step} speed={tick_data['speed']:.2f} steer={control.steer:.4f} throttle={control.throttle:.4f} brake={control.brake:.4f} | raw: steer_traj={float(steer_traj):.4f} throttle_traj={float(throttle_traj):.4f} brake_traj={float(brake_traj):.4f} desired_speed={metadata_traj.get('desired_speed', -1):.4f}", flush=True)
 		self.last_control = control
 		return control, agent_log
 

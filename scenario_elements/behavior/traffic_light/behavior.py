@@ -1,18 +1,19 @@
-import math
 import carla
 import py_trees
+import random
 
 from loguru import logger
 
 from tools.timer import GameTime
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict
 try:
-    from typing import Literal  # Python ≥3.8
+    from typing import Literal
 except ImportError:
-    from typing_extensions import Literal  # Python 3.7
-    
+    from typing_extensions import Literal
+
 from ..atomic import AtomicBehavior
+
 
 class TrafficLightBehaviorConfig(BaseModel):
     pattern: Optional[
@@ -22,482 +23,198 @@ class TrafficLightBehaviorConfig(BaseModel):
         description=(
             "Traffic light subtype (intersection configuration).\n"
             "- none: Always green (no control).\n"
-            "- rule: A rule controller."
+            "- rule: A rule-based cycle controller."
         ),
     )
     yellow_time: float = Field(..., gt=0, description="Duration of yellow light (seconds)")
     red_time: float = Field(..., gt=0, description="Duration of red light (seconds)")
     green_time: Optional[float] = Field(
-        None, gt=0, description="Duration of green light (seconds). If None, always green."
+        None, gt=0, description="Duration of green light (seconds). If None, defaults to red_time."
     )
 
     def cycle_length(self) -> float:
-        """Return total cycle length"""
-        if self.green_time is None:
-            return self.red_time + self.yellow_time  # Always green if green_time not set
-        return self.red_time + self.yellow_time + self.green_time
+        """Return total cycle length."""
+        g = self.green_time if self.green_time is not None else self.red_time
+        return g + self.yellow_time + self.red_time
+
+
+class _GroupState:
+    """Tracks the cycling state of one junction group."""
+    __slots__ = ("active_index", "phase", "phase_start")
+
+    def __init__(self, active_index: int, phase: str, now: float):
+        self.active_index = active_index
+        self.phase = phase  # "GREEN", "YELLOW", or "RED"
+        self.phase_start = now
 
 
 class TrafficLightBehavior(AtomicBehavior):
-    
     """
-    Atomic behavior that manipulates traffic lights around the ego_vehicle to trigger scenarios 7 to 10.
-    This is done by setting 2 of the traffic light at the intersection to green (with some complex precomputation
-    to set everything up).
+    Rule-based traffic light controller.
 
-    Important parameters:
-    - ego_vehicle: CARLA actor that controls this behavior
-    - subtype: string that gathers information of the route and scenario number
-      (check SUBTYPE_CONFIG_TRANSLATION below)
+    Each junction group cycles its subgroups through:
+        GREEN(active) -> YELLOW(active) -> RED(active) + GREEN(next) -> ...
+
+    All subgroups except the active one stay RED.
     """
 
     RED = carla.TrafficLightState.Red
     YELLOW = carla.TrafficLightState.Yellow
     GREEN = carla.TrafficLightState.Green
 
-    # Time constants
-    RED_TIME = 1.5  # Minimum time the ego vehicle waits in red (seconds)
-    YELLOW_TIME = 2  # Time spent at yellow state (seconds)
-    RESET_TIME = 6  # Time waited before resetting all the junction (seconds)
-
-    # Experimental values
-    TRIGGER_DISTANCE = 10  # Distance that makes all vehicles in the lane enter the junction (meters)
-    DIST_TO_WAITING_TIME = 0.04  # Used to wait longer at larger intersections (s/m)
-
-    INT_CONF_OPP1 = {'ego': RED, 'ref': RED, 'left': RED, 'right': RED, 'opposite': GREEN}
-    INT_CONF_OPP2 = {'ego': GREEN, 'ref': GREEN, 'left': RED, 'right': RED, 'opposite': GREEN}
-    INT_CONF_LFT1 = {'ego': RED, 'ref': RED, 'left': GREEN, 'right': RED, 'opposite': RED}
-    INT_CONF_LFT2 = {'ego': GREEN, 'ref': GREEN, 'left': GREEN, 'right': RED, 'opposite': RED}
-    INT_CONF_RGT1 = {'ego': RED, 'ref': RED, 'left': RED, 'right': GREEN, 'opposite': RED}
-    INT_CONF_RGT2 = {'ego': GREEN, 'ref': GREEN, 'left': RED, 'right': GREEN, 'opposite': RED}
-
-    INT_CONF_REF1 = {'ego': GREEN, 'ref': GREEN, 'left': RED, 'right': RED, 'opposite': RED}
-    INT_CONF_REF2 = {'ego': YELLOW, 'ref': YELLOW, 'left': RED, 'right': RED, 'opposite': RED}
-
-    # Depending on the scenario, IN ORDER OF IMPORTANCE, the traffic light changed
-    # The list has to contain only items of the INT_CONF
-    SUBTYPE_CONFIG_TRANSLATION = {
-        'S7left': ['left', 'opposite', 'right'],
-        'S7right': ['left', 'opposite'],
-        'S7opposite': ['right', 'left', 'opposite'],
-        'S8left': ['opposite'],
-        'S9right': ['left', 'opposite']
-    }
-
-    CONFIG_TLM_TRANSLATION = {
-        'left': [INT_CONF_LFT1, INT_CONF_LFT2],
-        'right': [INT_CONF_RGT1, INT_CONF_RGT2],
-        'opposite': [INT_CONF_OPP1, INT_CONF_OPP2]
-    }
-
     def __init__(
-        self, 
+        self,
         ctn_operator,
-        subtype, 
-        yellow_time = 2.0, 
-        red_time = 1.0, 
-        debug=False, 
-        name="TrafficLightBehavior"
+        pattern: str = "rule",
+        yellow_time: float = 2.0,
+        red_time: float = 1.5,
+        green_time: Optional[float] = None,
+        debug: bool = False,
+        name: str = "TrafficLightBehavior",
     ):
-        super(TrafficLightBehavior, self).__init__(name)
-        self.subtype = subtype
-        self.current_step = 1
-        self.debug = debug
+        super().__init__(name)
         self.ctn_operator = ctn_operator
         self.world = self.ctn_operator.get_world()
         self.map = self.world.get_map()
+        self.debug = debug
 
-        self.traffic_light = None
-        self.annotations = None
-        self.configuration = None
-        self.prev_junction_state = None
-        self.junction_location = None
-        self.seconds_waited = 0
-        self.prev_time = None
-        self.max_trigger_distance = None
-        self.waiting_time = None
-        self.inside_junction = False
+        self.green_time = green_time if green_time is not None else red_time
+        self.yellow_time = yellow_time
+        self.red_time = red_time
 
-        self.YELLOW_TIME = yellow_time
-        self.RED_TIME = red_time
-        
-        self._traffic_light_map = {} 
-        self.prepare_traffic_light_map()
+        # Build junction groups once at construction
+        self.traffic_lights = list(self.world.get_actors().filter("*traffic_light*"))
+        self.groups: List[List[List[carla.TrafficLight]]] = self._build_groups()
+        self.group_states: Dict[int, _GroupState] = {}
 
-        self.logger.debug("%s.__init__()" % (self.__class__.__name__))
-        
-    def prepare_traffic_light_map(self):
-        """
-        This function set the current map and loads all traffic lights for this map to
-        _traffic_light_map
-        """
-        # Parse all traffic lights
-        self._traffic_light_map.clear()
-        for traffic_light in self.world.get_actors().filter('*traffic_light*'):
-            if traffic_light not in list(self._traffic_light_map):
-                self._traffic_light_map[traffic_light] = traffic_light.get_transform()
-            else:
-                raise KeyError("Traffic light '{}' already registered. Cannot register twice!".format(traffic_light.id))
+        # Pre-freeze all lights' internal timers so CARLA doesn't fight us
+        self._freeze_timeout = 999999.0
 
-    # def get_next_traffic_light(self, actor):
-    #     """
-    #     returns the next relevant traffic light for the provided actor
-    #     """
-    #     location = actor.get_transform().location
+    # ------------------------------------------------------------------
+    # Group building (one-time cost)
+    # ------------------------------------------------------------------
+    def _build_groups(self) -> List[List[List[carla.TrafficLight]]]:
+        """Partition traffic lights into junction groups of directional subgroups."""
+        groups = []
+        visited: set = set()
 
-    #     waypoint = self.map.get_waypoint(location)
-    #     # Create list of all waypoints until next intersection
-    #     list_of_waypoints = []
-    #     while waypoint and not waypoint.is_junction:
-    #         list_of_waypoints.append(waypoint)
-    #         waypoint = waypoint.next(2.0)[0]
+        for tl in self.traffic_lights:
+            if tl.id in visited:
+                continue
 
-    #     # If the list is empty, the actor is in an intersection
-    #     if not list_of_waypoints:
-    #         return None
+            annotations = self._annotate_directions(tl)
+            subgroups = [annotations[k] for k in ("ref", "opposite", "left", "right") if annotations[k]]
 
-    #     relevant_traffic_light = None
-    #     distance_to_relevant_traffic_light = float("inf")
+            ids_in_group = {t.id for sg in subgroups for t in sg}
+            if ids_in_group:
+                groups.append(subgroups)
+                visited.update(ids_in_group)
 
-    #     for traffic_light in self._traffic_light_map:
-    #         if hasattr(traffic_light, 'trigger_volume'):
-    #             tl_t = self._traffic_light_map[traffic_light]
-    #             transformed_tv = tl_t.transform(traffic_light.trigger_volume.location)
-    #             distance = carla.Location(transformed_tv).distance(list_of_waypoints[-1].transform.location)
+        return groups
 
-    #             if distance < distance_to_relevant_traffic_light:
-    #                 relevant_traffic_light = traffic_light
-    #                 distance_to_relevant_traffic_light = distance
+    def _annotate_directions(self, traffic_light: carla.TrafficLight) -> Dict[str, List[carla.TrafficLight]]:
+        """Classify group members by relative yaw angle."""
+        result: Dict[str, List[carla.TrafficLight]] = {"ref": [], "opposite": [], "left": [], "right": []}
 
+        ref_location = self._trigger_location(traffic_light)
+        ref_yaw = self.map.get_waypoint(ref_location).transform.rotation.yaw
 
-    #     return relevant_traffic_light
-    
-    @staticmethod
-    def get_trafficlight_trigger_location(traffic_light):  # pylint: disable=invalid-name
-        """
-        Calculates the yaw of the waypoint that represents the trigger volume of the traffic light
-        """
+        for target_tl in traffic_light.get_group_traffic_lights():
+            if target_tl.id == traffic_light.id:
+                result["ref"].append(target_tl)
+                continue
 
-        def rotate_point(point, angle):
-            """
-            rotate a given point by a given angle
-            """
-            x_ = math.cos(math.radians(angle)) * point.x - math.sin(math.radians(angle)) * point.y
-            y_ = math.sin(math.radians(angle)) * point.x - math.cos(math.radians(angle)) * point.y
+            target_yaw = self.map.get_waypoint(self._trigger_location(target_tl)).transform.rotation.yaw
+            diff = (target_yaw - ref_yaw) % 360
 
-            return carla.Vector3D(x_, y_, point.z)
+            if diff > 330:
+                continue  # nearly same direction as ref, skip
+            elif diff > 225:
+                result["right"].append(target_tl)
+            elif diff > 135:
+                result["opposite"].append(target_tl)
+            elif diff > 30:
+                result["left"].append(target_tl)
 
-        base_transform = traffic_light.get_transform()
-        base_rot = base_transform.rotation.yaw
-        area_loc = base_transform.transform(traffic_light.trigger_volume.location)
-        area_ext = traffic_light.trigger_volume.extent
+        return result
 
-        point = rotate_point(carla.Vector3D(0, 0, area_ext.z), base_rot)
-        point_location = area_loc + carla.Location(x=point.x, y=point.y)
+    def _trigger_location(self, tl: carla.TrafficLight) -> carla.Location:
+        loc = tl.get_transform().transform(tl.trigger_volume.location)
+        return carla.Location(loc.x, loc.y, loc.z)
 
-        return carla.Location(point_location.x, point_location.y, point_location.z)
-    
-    def annotate_trafficlight_in_group(self, traffic_light):
-        # type: (carla.TrafficLight) -> dict[str, list[carla.TrafficLight]]
-        """
-        Get dictionary with traffic light group info for a given traffic light
-        """
-        dict_annotations = {'ref': [], 'opposite': [], 'left': [], 'right': []}
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+    def initialise(self):
+        logger.info(f"[TrafficLightBehavior] {len(self.groups)} junction groups, "
+                    f"cycle: G={self.green_time}s Y={self.yellow_time}s R={self.red_time}s")
 
-        # Get the waypoints
-        ref_location = self.get_trafficlight_trigger_location(traffic_light)
-        ref_waypoint = self.map.get_waypoint(ref_location)
-        ref_yaw = ref_waypoint.transform.rotation.yaw
+        now = GameTime.get_time()
+        for gid, group in enumerate(self.groups):
+            # Pick a random initial active subgroup
+            init_idx = random.randint(0, len(group) - 1)
+            self._set_subgroup_state(group, init_idx)
+            self.group_states[gid] = _GroupState(init_idx, "GREEN", now)
 
-        group_tl = traffic_light.get_group_traffic_lights()
+    def _set_subgroup_state(self, group, active_idx, active_state=None):
+        """Set one subgroup to active_state (default GREEN), all others to RED. Freeze timers."""
+        if active_state is None:
+            active_state = self.GREEN
+        for idx, subgroup in enumerate(group):
+            state = active_state if idx == active_idx else self.RED
+            for tl in subgroup:
+                tl.set_state(state)
+                tl.set_green_time(self._freeze_timeout)
+                tl.set_yellow_time(self._freeze_timeout)
+                tl.set_red_time(self._freeze_timeout)
 
-        for target_tl in group_tl:
-            if traffic_light.id == target_tl.id:
-                dict_annotations['ref'].append(target_tl)
-            else:
-                # Get the angle between yaws
-                target_location = self.get_trafficlight_trigger_location(target_tl)
-                target_waypoint = self.map.get_waypoint(target_location)
-                target_yaw = target_waypoint.transform.rotation.yaw
-
-                diff = (target_yaw - ref_yaw) % 360
-
-                if diff > 330:
-                    continue
-                elif diff > 225:
-                    dict_annotations['right'].append(target_tl)
-                elif diff > 135.0:
-                    dict_annotations['opposite'].append(target_tl)
-                elif diff > 30:
-                    dict_annotations['left'].append(target_tl)
-
-        return dict_annotations
-    
-    @staticmethod
-    def reset_lights(reset_params):
-        """
-        Reset traffic lights
-        """
-        for param in reset_params:
-            param['light'].set_state(param['state'])
-            param['light'].set_green_time(param['green_time'])
-            param['light'].set_red_time(param['red_time'])
-            param['light'].set_yellow_time(param['yellow_time'])
-    
-    @staticmethod
-    def update_light_states(ego_light, annotations, states, freeze=False, timeout=1000000000):
-        # type: (carla.TrafficLight, dict[str, list[carla.TrafficLight]], dict[str, carla.TrafficLightState], bool, float) -> list[dict[str, carla.TrafficLight | carla.TrafficLightState | float]] # pylint: disable=line-too-long
-        """
-        Update traffic light states
-        """
-        reset_params = []  # type: list[dict]
-
-        for state in states:
-            relevant_lights = []
-            if state == 'ego':
-                relevant_lights = [ego_light]
-            else:
-                relevant_lights = annotations[state]
-            for light in relevant_lights:
-                prev_state = light.get_state()
-                prev_green_time = light.get_green_time()
-                prev_red_time = light.get_red_time()
-                prev_yellow_time = light.get_yellow_time()
-                reset_params.append(
-                    {
-                        'light': light,
-                        'state': prev_state,
-                        'green_time': prev_green_time,
-                        'red_time': prev_red_time,
-                        'yellow_time': prev_yellow_time,
-                    }
-                )
-
-                light.set_state(states[state])
-                if freeze:
-                    light.set_green_time(timeout)
-                    light.set_red_time(timeout)
-                    light.set_yellow_time(timeout)
-
-        return reset_params
-         
+    # ------------------------------------------------------------------
+    # Per-tick update
+    # ------------------------------------------------------------------
     def update(self):
+        now = GameTime.get_time()
 
-        new_status = py_trees.common.Status.RUNNING
+        for gid, group in enumerate(self.groups):
+            gs = self.group_states.get(gid)
+            if gs is None:
+                continue
 
-        # 1) Set up the parameters
-        if self.current_step == 1:
+            elapsed = now - gs.phase_start
 
-            # Traffic light affecting the ego vehicle
-            # self.traffic_light = self.get_next_traffic_light(self.ego_vehicle)
-            traffic_light_ids = list(self._traffic_light_map.keys())
-            self.traffic_light = self._traffic_light_map[traffic_light_ids[0]]
-            if not self.traffic_light:
-                # nothing else to do in this iteration...
-                return new_status
+            if gs.phase == "GREEN" and elapsed >= self.green_time:
+                # GREEN -> YELLOW for active subgroup
+                for tl in group[gs.active_index]:
+                    tl.set_state(self.YELLOW)
+                gs.phase = "YELLOW"
+                gs.phase_start = now
 
-            # "Topology" of the intersection
-            self.annotations = self.annotate_trafficlight_in_group(self.traffic_light)
+            elif gs.phase == "YELLOW" and elapsed >= self.yellow_time:
+                # YELLOW -> RED for active, advance to next subgroup
+                prev_idx = gs.active_index
+                next_idx = (prev_idx + 1) % len(group)
 
-            # Which traffic light will be modified (apart from the ego lane)
-            self.configuration = self.get_traffic_light_configuration(self.subtype, self.annotations)
-            if self.configuration is None:
-                self.current_step = 0  # End the behavior
-                return new_status
+                # Previous subgroup -> RED
+                for tl in group[prev_idx]:
+                    tl.set_state(self.RED)
 
-            # Modify the intersection. Store the previous state
-            self.prev_junction_state = self.set_intersection_state(self.INT_CONF_REF1)
+                # Next subgroup -> GREEN
+                for tl in group[next_idx]:
+                    tl.set_state(self.GREEN)
 
-            self.current_step += 1
-            if self.debug:
-                logger.debug("--- All set up")
+                gs.active_index = next_idx
+                gs.phase = "GREEN"
+                gs.phase_start = now
 
-        # 2) Modify the ego lane to yellow when closeby
-        elif self.current_step == 2:
-
-            ego_location = self.ego_vehicle.get_location()
-
-            if self.junction_location is None:
-                ego_waypoint = self.map.get_waypoint(ego_location)
-                junction_waypoint = ego_waypoint.next(0.5)[0]
-                while not junction_waypoint.is_junction:
-                    next_wp = junction_waypoint.next(0.5)
-                    if len(next_wp) > 0:
-                        next_wp = next_wp[0]
-                        junction_waypoint = next_wp
-                    else:
-                        break
-                self.junction_location = junction_waypoint.transform.location
-
-            distance = ego_location.distance(self.junction_location)
-
-            # Failure check
-            if self.max_trigger_distance is None:
-                self.max_trigger_distance = distance + 1
-            if distance > self.max_trigger_distance:
-                self.current_step = 0
-
-            elif distance < self.TRIGGER_DISTANCE:
-                _ = self.set_intersection_state(self.INT_CONF_REF2)
-                self.current_step += 1
-
-            if self.debug:
-                logger.debug("--- Distance until traffic light changes: {}".format(distance))
-
-        # 3) Modify the ego lane to red and the chosen one to green after several seconds
-        elif self.current_step == 3:
-
-            if self.passed_enough_time(self.YELLOW_TIME):
-                _ = self.set_intersection_state(self.CONFIG_TLM_TRANSLATION[self.configuration][0])
-
-                self.current_step += 1
-
-        # 4) Wait a bit to let vehicles enter the intersection, then set the ego lane to green
-        elif self.current_step == 4:
-
-            # Get the time in red, dependent on the intersection dimensions
-            if self.waiting_time is None:
-                self.waiting_time = self.get_waiting_time(self.annotations, self.configuration)
-
-            if self.passed_enough_time(self.waiting_time):
-                _ = self.set_intersection_state(self.CONFIG_TLM_TRANSLATION[self.configuration][1])
-
-                self.current_step += 1
-
-        # 5) Wait for the end of the intersection
-        elif self.current_step == 5:
-            # the traffic light has been manipulated, wait until the vehicle finsihes the intersection
-            ego_location = self.ego_vehicle.get_location()
-            ego_waypoint = self.map.get_waypoint(ego_location)
-
-            if not self.inside_junction:
-                if ego_waypoint.is_junction:
-                    # Wait for the ego_vehicle to enter a junction
-                    self.inside_junction = True
-                else:
-                    if self.debug:
-                        logger.debug("--- Waiting to ENTER a junction")
-
-            else:
-                if ego_waypoint.is_junction:
-                    if self.debug:
-                        logger.debug("--- Waiting to EXIT a junction")
-                else:
-                    # And to leave it
-                    self.inside_junction = False
-                    self.current_step += 1
-
-        # 6) At the end (or if something failed), reset to the previous state
-        else:
-            if self.prev_junction_state:
-                self.reset_lights(self.prev_junction_state)
                 if self.debug:
-                    logger.debug("--- Returning the intersection to its previous state")
+                    logger.debug(f"[Group {gid}] Phase {prev_idx} -> {next_idx}")
 
-            self.variable_cleanup()
-            new_status = py_trees.common.Status.SUCCESS
+        return py_trees.common.Status.RUNNING
 
-        return new_status
-
-    def passed_enough_time(self, time_limit):
-        """
-        Returns true or false depending on the time that has passed from the
-        first time this function was called
-        """
-        # Start the timer
-        if self.prev_time is None:
-            self.prev_time = GameTime.get_time()
-
-        timestamp = GameTime.get_time()
-        self.seconds_waited += (timestamp - self.prev_time)
-        self.prev_time = timestamp
-
-        if self.debug:
-            logger.debug("--- Waited seconds: {}".format(self.seconds_waited))
-
-        if self.seconds_waited >= time_limit:
-            self.seconds_waited = 0
-            self.prev_time = None
-
-            return True
-        return False
-
-    def set_intersection_state(self, choice):
-        """
-        Changes the intersection to the desired state
-        """
-        prev_state = self.update_light_states(
-            self.traffic_light,
-            self.annotations,
-            choice,
-            freeze=True)
-
-        return prev_state
-
-    def get_waiting_time(self, annotation, direction):
-        """
-        Calculates the time the ego traffic light will remain red
-        to let vehicles enter the junction
-        """
-
-        tl = annotation[direction][0]
-        ego_tl = annotation["ref"][0]
-
-        tl_location = self.get_trafficlight_trigger_location(tl)
-        ego_tl_location = self.get_trafficlight_trigger_location(ego_tl)
-
-        distance = ego_tl_location.distance(tl_location)
-
-        return self.RED_TIME + distance * self.DIST_TO_WAITING_TIME
-
-    def get_traffic_light_configuration(self, subtype, annotations):
-        """
-        Checks the list of possible altered traffic lights and gets
-        the first one that exists in the intersection
-
-        Important parameters:
-        - subtype: Subtype of the scenario
-        - annotations: list of the traffic light of the junction, with their direction (right, left...)
-        """
-        configuration = None
-
-        if subtype in self.SUBTYPE_CONFIG_TRANSLATION:
-            possible_configurations = self.SUBTYPE_CONFIG_TRANSLATION[self.subtype]
-            while possible_configurations:
-                # Chose the first one and delete it
-                configuration = possible_configurations[0]
-                possible_configurations = possible_configurations[1:]
-                if configuration in annotations:
-                    if annotations[configuration]:
-                        # Found a valid configuration
-                        break
-                    else:
-                        # The traffic light doesn't exist, get another one
-                        configuration = None
-                else:
-                    if self.debug:
-                        logger.debug("This configuration name is wrong")
-                    configuration = None
-
-            if configuration is None and self.debug:
-                logger.debug("This subtype has no traffic light available")
-        else:
-            if self.debug:
-                logger.debug("This subtype is unknown")
-
-        return configuration
-
-    def variable_cleanup(self):
-        """
-        Resets all variables to the intial state
-        """
-        self.current_step = 1
-        self.traffic_light = None
-        self.annotations = None
-        self.configuration = None
-        self.prev_junction_state = None
-        self.junction_location = None
-        self.max_trigger_distance = None
-        self.waiting_time = None
-        self.inside_junction = False
-
+    def terminate(self, new_status):
+        super().terminate(new_status)
+        # Reset all lights to green on termination
+        for group in self.groups:
+            for subgroup in group:
+                for tl in subgroup:
+                    tl.set_state(self.GREEN)
+                    tl.set_green_time(self._freeze_timeout)

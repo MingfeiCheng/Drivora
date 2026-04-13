@@ -1,18 +1,25 @@
 #!/bin/bash
-set -e  
+# InterFuser — uv + Python 3.8 + CARLA >= 0.9.12
+set -e
 
-pip install --upgrade setuptools
-pip install torch==1.13.1+cu117 torchvision==0.14.1+cu117 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu117
-pip install gdown
+uv pip install --upgrade setuptools wheel
+uv pip install torch==2.0.1+cu118 torchvision==0.15.2+cu118 torchaudio==2.0.2 --extra-index-url https://download.pytorch.org/whl/cu118
+uv pip install gdown
 
-cd "$(dirname "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
 
 FILE_ID="1GKiASmGPbD4FwHkUoVfGRk_lMLrGb2f6"
 FILE_NAME="interfuser.pth.tar"
 
-gdown -c --id "$FILE_ID" -O "$FILE_NAME"
+if [ "${SKIP_DOWNLOAD:-0}" != "1" ] && [ ! -f "$FILE_NAME" ]; then
+    gdown -c --id "$FILE_ID" -O "$FILE_NAME"
+else
+    echo "[INFO] Skipping checkpoint download."
+fi
 
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 
+# Install interfuser sub-package using uv (avoids setuptools version conflicts)
 cd interfuser
-python setup.py develop
+uv pip install -e .

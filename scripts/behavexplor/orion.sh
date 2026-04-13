@@ -2,46 +2,61 @@
 set -euo pipefail
 
 # ==== GPU Config ====
-export CUDA_VISIBLE_DEVICES=2,3 
+export CUDA_VISIBLE_DEVICES=0
+
+# ==== Tester venv ====
+TESTER_VENV=".venvs/random"
+TESTER_PYTHON="${TESTER_VENV}/bin/python"
+
+if [ ! -f "$TESTER_PYTHON" ]; then
+    echo "[ERROR] Tester venv not found at ${TESTER_VENV}."
+    exit 1
+fi
 
 # ==== Common Config ====
-output_root="results"
-run_index=1
-max_sim_time=600.0
-open_vis=true
-distribute_num=2  # Number of distributed execution instances
-
-# Carla
-carla_image="carlasim/carla:0.9.15"
+output_root="results/behavexplor_orion"
+run_tag="behavexplor_orion"
+max_sim_time=120.0
+open_vis=false
+save_agent_internal=false
+distribute_num=1
 
 # ==== Agent Config ====
-agent_name="orion"
 agent_entry_point="agent_corpus.orion.orion_b2d_agent:OrionAgent"
-agent_config_path="agent_corpus/orion/adzoo/orion/configs/orion_stage3_agent.py+agent_corpus/orion/ckpts/Orion.pth"
+agent_config_path="agent_corpus/orion/adzoo/OrionDrive/configs/orion_ft_b2d.py+agent_corpus/orion/Bench2DriveZoo/orion_b2d.pth"
+ads_venv_dir=".venvs/orion"
 
 # ==== Scenario Config ====
-seed_segment="route_100_200"
-seed_id="Town01_0001"
-scenario_type="open_scenario"
-scenario_seed_path="scenario_datasets/open_scenario/0.9.15/${seed_segment}/${seed_id}.json"
+scenario_executor_script="scenario_corpus/openscenario/run_scenario.py"
 
-# ==== Tester Config ====
+# ==== Tester / Fuzzer Config ====
 tester_type="behavexplor"
-tester_config_path="fuzzer/open_scenario/behavexplor/configs/open_scenario.yaml"
+tester_config_path="fuzzer/configs/debug_behavexplor.yaml"
+time_budget=4
+population_size=4
 
-run_tag="${tester_type}_${agent_name}_${seed_segment}_${seed_id}_run${run_index}"
+# ==== CARLA Config ====
+carla_image="carlasim/carla:0.9.15"
+carla_fps=20
 
-# ==== Run (Hydra style overrides) ====
-python start_fuzzer.py \
+# ==== Run ====
+"$TESTER_PYTHON" start_fuzzer.py \
+  fuzzer_dir="fuzzer" \
   output_root="$output_root" \
-  distribute_num="$distribute_num" \
   run_tag="$run_tag" \
+  distribute_num="$distribute_num" \
   max_sim_time="$max_sim_time" \
   open_vis="$open_vis" \
+  save_agent_internal="$save_agent_internal" \
+  debug=false \
+  resume=true \
+  carla.image="$carla_image" \
+  carla.fps="$carla_fps" \
   tester.type="$tester_type" \
   tester.config_path="$tester_config_path" \
+  tester.time_budget="$time_budget" \
+  tester.population_size="$population_size" \
   agent.entry_point="$agent_entry_point" \
-  agent.config_path="'${agent_config_path}'" \
-  scenario.type="$scenario_type" \
-  scenario.seed_path="$scenario_seed_path" \
-  carla.image="'${carla_image}'"
+  agent.config_path="$agent_config_path" \
+  agent.ads_venv_dir="$ads_venv_dir" \
+  scenario.executor_script="$scenario_executor_script"

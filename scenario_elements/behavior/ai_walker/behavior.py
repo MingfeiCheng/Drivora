@@ -1,10 +1,11 @@
 import carla
 import py_trees
+import numpy as np
 
-from typing import Optional, List, Dict
+from typing import Optional, List
 from pydantic import BaseModel, Field
 
-from ..atomic import AtomicBehavior
+from ..atomic import AtomicBehavior, GameTime
 
 from scenario_elements.config import Waypoint
 from scenario_runner.ctn_operator import CtnSimOperator
@@ -22,6 +23,9 @@ class AIWalkerConfig(BaseModel):
     route: List[Waypoint] = Field(
         ..., description="Behavior configuration for the walker"
     )
+    bounding_box: Optional[dict] = Field(
+        None, description="Bounding box dimensions and location offset"
+    )
     
     def get_initial_waypoint(self) -> Waypoint:
         return self.route[0]
@@ -33,6 +37,8 @@ class AIWalkerConfig(BaseModel):
         return carla.Location(x=last_wp.x, y=last_wp.y, z=last_wp.z)
     
     
+EPSILON = 0.001
+
 class AIWalkerBehavior(AtomicBehavior):
     """
     Behavior that creates a walker controlled by AI Walker controller.
@@ -54,7 +60,7 @@ class AIWalkerBehavior(AtomicBehavior):
         """
         Setup class members
         """
-        super(AIWalkerBehavior, self).__init__(name, actor=actor)
+        super().__init__(name, actor=actor)
 
         self.ctn_operator = ctn_operator
         self._world = self.ctn_operator.get_world()
@@ -75,22 +81,29 @@ class AIWalkerBehavior(AtomicBehavior):
         spawned at given location.
         """
         # Use ai.walker to controll the walker
-        self._controller = self._world.try_spawn_actor(
-            self._controller_bp, carla.Transform(), self._walker)
-        self._controller.start()
-        self._controller.go_to_location(self._sink_location)
+        self._controller = self._world.try_spawn_actor(self._controller_bp, carla.Transform(), self._walker)
+        
+        # NOTE: may not be put successfully
+        if self._controller is not None:
+            self._controller.start()
+            self._controller.go_to_location(self._sink_location)
 
-        super(AIWalkerBehavior, self).initialise()
+        self._last_moving_time = GameTime.get_time()
+        super().initialise()
 
     def update(self):
         """Controls the created walker"""
-        # Remove walkers when needed
-        if self._walker is not None:
-            loc = self._walker.get_location() # CarlaDataProvider.get_location(self._walker)
-            # At the very beginning of the scenario, the get_location may return None
-            if loc is not None:
-                if loc.distance(self._sink_location) < self._sink_dist:
-                    self.terminate(py_trees.common.Status.SUCCESS)
+        if self._walker is None or not self._walker.is_alive:
+            return py_trees.common.Status.SUCCESS
+
+        try:
+            loc = self._walker.get_location()
+        except RuntimeError:
+            return py_trees.common.Status.SUCCESS
+
+        if loc is not None:
+            if loc.distance(self._sink_location) < self._sink_dist:
+                self.terminate(py_trees.common.Status.SUCCESS)
 
         return py_trees.common.Status.RUNNING
 

@@ -1,0 +1,108 @@
+# ===========================
+# Python
+# ===========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+*.so
+
+# ===========================
+# Virtual environments
+# ===========================
+.venv/
+.venv_*/
+.venvs/
+
+# ===========================
+# IDE / Editors
+# ===========================
+.claude/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===========================
+# OS
+# ===========================
+.DS_Store
+Thumbs.db
+
+# ===========================
+# Logs
+# ===========================
+*.log
+logs/
+
+# ===========================
+# Docker
+# ===========================
+docker-compose.override.yml
+
+# ===========================
+# Model weights & checkpoints (large files)
+# ===========================
+*.pth
+*.pt
+*.ckpt
+*.h5
+*.bin
+*.safetensors
+*.onnx
+*.pth.tar
+
+# Agent-specific large dirs
+agent_corpus/*/Bench2DriveZoo/
+agent_corpus/*/ckpts/
+agent_corpus/*/model_ckpt/
+agent_corpus/*/checkpoints/
+agent_corpus/lav/weights/
+agent_corpus/plant/checkpoints/
+agent_corpus/simlingo/simlingo/
+agent_corpus/transfuser/model_ckpt/
+agent_corpus/roach/log/
+
+# ===========================
+# Results & outputs
+# ===========================
+results/
+outputs/
+cache/
+img/
+
+# ===========================
+# Hydra outputs
+# ===========================
+hydra/
+multirun/
+
+# ===========================
+# Environment
+# ===========================
+.env
+.env.*
+
+# ===========================
+# CARLA egg files
+# ===========================
+pkgs/*.egg
+
+# ===========================
+# Misc large / generated files
+# ===========================
+*.zip
+*.tar.gz
+*.tar
+core
+core.*
+pretrained/
+
+# ===========================
+# Legacy (not tracked)
+# ===========================
+z_drop_fuzzer/

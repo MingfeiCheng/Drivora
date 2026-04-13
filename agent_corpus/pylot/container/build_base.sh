@@ -1,1 +1,0 @@
-docker build -f Dockerfile.base -t drivora/pylot:0.9.10.1 .

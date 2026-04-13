@@ -9,8 +9,6 @@
 This module provide BasicScenario, the basic class of all the scenarios.
 """
 
-from __future__ import print_function
-
 import os
 import cv2
 import sys
@@ -67,6 +65,7 @@ class ScenarioManager(object):
         pytree_debug: bool = False,
         require_vis: bool = False,
         max_sim_time: float = 300.0,
+        save_agent_internal: bool = False,
     ):
         """
         Setup all relevant parameters and create scenario
@@ -81,6 +80,7 @@ class ScenarioManager(object):
         self.debug = debug
         self.pytree_debug = pytree_debug  # Whether to enable py_trees debug mode
         self.require_vis = require_vis  # Whether to enable visualization
+        self.save_agent_internal = save_agent_internal  # Whether agents save internal data
         self.scenario_dir = scenario_dir  # directory to save the scenario results
         self.max_sim_time = max_sim_time if max_sim_time > 0 else 600.0
         
@@ -153,36 +153,57 @@ class ScenarioManager(object):
     
     def _load_wait_for_world(self, town):
         """
-        Load a new CARLA world and provide data to CarlaDataProvider
+        Load a new CARLA world and provide data to CarlaDataProvider.
+        Skips load_world if the correct map is already loaded.
         """
-        
-        # TODO: check if we need this
+        self.client.set_timeout(60.0)
+
         tm = self.client.get_trafficmanager(int(self.ctn_operator.tm_port))
         tm.set_random_device_seed(int(self.ctn_operator.random_seed))
         if self.ctn_operator.is_sync_mode:
             tm.set_synchronous_mode(True)
-            
-        try:
+
+        # Only load_world if the current map doesn't match
+        current_world = self.client.get_world()
+        current_map_name = os.path.basename(current_world.get_map().name)
+        if current_map_name != town:
+            logger.info(f"Map mismatch ({current_map_name} != {town}), loading {town}...")
             self.world = self.client.load_world(town)
-        except Exception as e:
-            logger.error(traceback.print_exc())
-            logger.error("> {}\033[0m\n".format(e))
+        else:
+            logger.info(f"Map {town} already loaded, reusing world.")
+            self.world = current_world
+            # Destroy existing actors to get a clean state
+            actors = self.world.get_actors().filter('vehicle.*')
+            for a in actors:
+                try:
+                    a.destroy()
+                except Exception:
+                    pass
+            actors = self.world.get_actors().filter('walker.*')
+            for a in actors:
+                try:
+                    a.destroy()
+                except Exception:
+                    pass
+            actors = self.world.get_actors().filter('sensor.*')
+            for a in actors:
+                try:
+                    a.destroy()
+                except Exception:
+                    pass
 
         settings = self.world.get_settings()
-        settings.fixed_delta_seconds = 1.0 / self.ctn_operator.fps # use here
+        settings.fixed_delta_seconds = 1.0 / self.ctn_operator.fps
         settings.synchronous_mode = True
         self.world.apply_settings(settings)
         self.world.reset_all_traffic_lights()
 
-        # Wait for the world to be ready
         if self.ctn_operator.is_sync_mode:
             self.world.tick()
         else:
             self.world.wait_for_tick()
 
-        if os.path.basename(self.world.get_map().name) != town:
-            raise Exception(f"The CARLA server uses the wrong map {self.world.get_map().name}!"
-                            "This scenario requires to use map {}".format(town))
+        self.client.set_timeout(30.0)  # restore normal timeout
 
     def run(self):
         logger.info(f"[ScenarioManager] Running scenario {self.scenario_config.id}")
@@ -219,7 +240,7 @@ class ScenarioManager(object):
                 for vehicle_id, vehicle in self.scenario_instance.ego_vehicles.items():
                     vehicle.set_light_state(carla.VehicleLightState(self._vehicle_lights))
                     
-                for actor_id, actor in self.scenario_instance.other_actors:
+                for actor_id, actor in self.scenario_instance.other_actors.items():
                     if isinstance(actor, carla.Vehicle) and actor.is_alive:
                         actor.set_light_state(carla.VehicleLightState(self._vehicle_lights))
             
@@ -253,7 +274,8 @@ class ScenarioManager(object):
                     vehicle=self.scenario_instance.ego_vehicles[ego_id],
                     ctn_operator=self.ctn_operator,
                     scenario_dir=self.scenario_dir,
-                    ego_config = ego_config.config_path
+                    ego_config=ego_config.config_path,
+                    save_internal=self.save_agent_internal,
                 ) 
                 
                 self.agent_instances[ego_id] = agent_instance
@@ -271,92 +293,111 @@ class ScenarioManager(object):
         
         # 5. running the scenarios
         try:
-            self._run_scenario_loop()
+            loop_ok = self._run_scenario_loop()
+            if loop_ok is False:
+                return False
         except KeyboardInterrupt:
             logger.info("KeyboardInterrupt, stopping scenario...")
             self.stop()
+            return False
         except Exception as e:
             logger.error(f"Exception during scenario run: {e}")
             traceback.print_exc()
             self.stop()
             return False
-    
-        # 6. anaylze and stop the scenario
+
+        # 6. analyze and stop the scenario
         self.stop()
         logger.info(f"Scenario {self.scenario_config.id} finished")
         return True
     
     def stop(self, signum=None, frame=None):
         """
-        Stop the scenario and all sub-scenarios
+        Stop the scenario and all sub-scenarios.
+        If CARLA connection is lost, skip cleanup and exit fast.
         """
         self._running = False
         self._watchdog_tick.stop()
-        
+
         if self._watchdog_agent:
             self._watchdog_agent.stop()
-        
+
         # time counter
         self.end_system_time = time.time()
         self.end_game_time = GameTime.get_time()
-        
         self.scenario_duration_system = self.end_system_time - self.start_system_time
         self.scenario_duration_game = self.end_game_time - self.start_game_time
-        
-        # clean up sensors
-        for i, _ in enumerate(self.recorder_sensor_list):
-            if self.recorder_sensor_list[i] is not None:
-                self.recorder_sensor_list[i].stop()
-                self.recorder_sensor_list[i].destroy()
-                self.recorder_sensor_list[i] = None
-        self.recorder_sensor_list.clear()
-        
-        # cleean the agent runners
-        for ego_id, agent_runner in self.agent_runners.items():
-            if agent_runner is not None:
-                try:
-                    agent_runner.cleanup()
-                except Exception as e:
-                    logger.warning(f"[WARN] Failed to stop agent runner for {ego_id}: {e}")
-        self.agent_runners.clear()
-        
-        # clean up the agent instances
-        if self.agent_instances:
-            for agent_id, agent_ins in self.agent_instances.items(): # this is agent wrapper right?
+
+        # Quick check if CARLA is still reachable — if not, skip all destroy calls
+        carla_alive = False
+        try:
+            self.client.set_timeout(3.0)
+            self.client.get_server_version()
+            carla_alive = True
+        except Exception:
+            pass
+
+        if carla_alive:
+            # clean up sensors
+            for i, _ in enumerate(self.recorder_sensor_list):
+                if self.recorder_sensor_list[i] is not None:
+                    try:
+                        self.recorder_sensor_list[i].stop()
+                        self.recorder_sensor_list[i].destroy()
+                    except Exception:
+                        pass
+                    self.recorder_sensor_list[i] = None
+            self.recorder_sensor_list.clear()
+
+            # clean the agent runners
+            for ego_id, agent_runner in self.agent_runners.items():
+                if agent_runner is not None:
+                    try:
+                        agent_runner.cleanup()
+                    except Exception:
+                        pass
+            self.agent_runners.clear()
+
+            # clean up the agent instances
+            for agent_id, agent_ins in self.agent_instances.items():
                 if agent_ins:
                     try:
                         agent_ins.destroy()
-                        agent_ins = None
-                    except Exception as e:
-                        logger.warning(f"[WARN] Failed to destroy agent {agent_id}: {e}")
-                        
+                    except Exception:
+                        pass
             self.agent_instances.clear()
-        
- 
-        if self.scenario_instance:       
-            self.scenario_instance.terminate()
-            self.scenario_instance.remove_all_actors()
-            self.analyze_scenario() # save results
-            
-            self.scenario_instance = None
-            
-        if signum == signal.SIGINT:
-            pass # May need some special handling for SIGINT
-            # GlobalConfig.get_world().apply_settings(carla.WorldSettings(synchronous_mode=False))
 
-        # TODO: check if we need this
-        if self.world is not None and self.ctn_operator.is_sync_mode:
+            if self.scenario_instance:
+                try:
+                    self.scenario_instance.terminate()
+                    self.scenario_instance.remove_all_actors()
+                except Exception:
+                    pass
+        else:
+            logger.warning("CARLA connection lost, skipping actor cleanup.")
+            self.recorder_sensor_list.clear()
+            self.agent_runners.clear()
+            self.agent_instances.clear()
+
+        # Always analyze and save results (doesn't need CARLA)
+        if self.scenario_instance:
+            self.analyze_scenario()
+            self.scenario_instance = None
+
+        # Always save observation + video (even if scenario errored mid-run)
+        self._save_video()
+        self._save_observation()
+
+        # Try to reset world settings
+        if carla_alive and self.world is not None and self.ctn_operator.is_sync_mode:
             try:
-                # Reset to asynchronous mode
                 settings = self.world.get_settings()
                 settings.synchronous_mode = False
                 settings.fixed_delta_seconds = None
                 self.world.apply_settings(settings)
                 self.client.get_trafficmanager(int(self.ctn_operator.tm_port)).set_synchronous_mode(False)
-            except RuntimeError:
-                logger.error("Failed to reset CARLA world to asynchronous mode. "
-                             "This might be due to the scenario not being properly terminated.")
-                sys.exit(-1)
+            except Exception:
+                pass
     
     def _run_scenario_loop(self):
         
@@ -365,22 +406,20 @@ class ScenarioManager(object):
         
         # 2. wrapper the agent instances
         for ego_id, agent_instance in self.agent_instances.items():
-            if ego_id in self.scenario_instance.ego_vehicles:
-                agent_runner = None
-                try:
-                    # setup the agent wrapper
-                    agent_runner = AgentWrapper(agent_instance, self.ctn_operator)
-                    agent_runner.setup_sensors()
-                    self.agent_runners[ego_id] = agent_runner
-                except Exception as e:
-                    logger.error(f"Failed to wrap agent for ego vehicle {ego_id}: {e}")
-                    traceback.print_exc()
-                    self.stop()
-                    raise RuntimeError(f"Ego vehicle {ego_id} not found in scenario instance.")
-            else:
+            if ego_id not in self.scenario_instance.ego_vehicles:
                 logger.error(f"Ego vehicle {ego_id} not found in scenario instance.")
                 self.stop()
-                raise RuntimeError(f"Ego vehicle {ego_id} not found in scenario instance.")
+                return False
+
+            try:
+                agent_runner = AgentWrapper(agent_instance, self.ctn_operator)
+                agent_runner.setup_sensors()
+                self.agent_runners[ego_id] = agent_runner
+            except Exception as e:
+                logger.error(f"Failed to setup sensors for ego vehicle {ego_id}: {e}")
+                traceback.print_exc()
+                self.stop()
+                return False
         
         # 3. setup some recorder sensors
         if self.require_vis:
@@ -393,7 +432,12 @@ class ScenarioManager(object):
             self.world.wait_for_tick()
             
         self.recorder_observation = [] # reset the recorder observation
-        
+
+        # ensure recorder directories exist
+        self._recorder_save_dir = os.path.join(self.scenario_dir, 'agent')
+        self._recorder_video_dir = os.path.join(self._recorder_save_dir, 'video')
+        os.makedirs(self._recorder_video_dir, exist_ok=True)
+
         # 4. run - run bar time counter
         self.start_system_time = time.time()
         self.start_game_time = GameTime.get_time()
@@ -445,24 +489,37 @@ class ScenarioManager(object):
                     f"Game: {game_timestamp:.3f} "
                 )
         
-        # 5. run finished
-        # save the video
-        recorder_video_dir = os.path.join(self.scenario_dir, 'agent/video')
-        if os.path.exists(recorder_video_dir):
-            ego_ids = os.listdir(recorder_video_dir)
-            for ego_id in ego_ids:
-                ego_video_dir = os.path.join(recorder_video_dir, ego_id)
-                if os.path.isdir(ego_video_dir):
-                    images_to_video(ego_video_dir, f"{recorder_video_dir}/{ego_id}.mp4", fps=30, delete_folder=True)
-                    
-        # save the scenario record
-        observation_file = os.path.join(self.scenario_dir, 'observation.jsonl.gz')
-        # with open(observation_file, 'w') as f:
-        #     json.dump(self.recorder_observation, f, indent=4)
-        with gzip.open(observation_file, "wt", encoding="utf-8") as f:
-            for record in self.recorder_observation:
-                f.write(json.dumps(record) + "\n")
+        # 5. run finished — observation + video saved in stop()
         
+    def _save_video(self):
+        """Convert recorded frames to video. Called from stop()."""
+        if not self.scenario_dir:
+            return
+        try:
+            recorder_video_dir = os.path.join(self.scenario_dir, 'agent/video')
+            if os.path.exists(recorder_video_dir):
+                for ego_id in os.listdir(recorder_video_dir):
+                    ego_video_dir = os.path.join(recorder_video_dir, ego_id)
+                    if os.path.isdir(ego_video_dir):
+                        images_to_video(ego_video_dir, f"{recorder_video_dir}/{ego_id}.mp4", fps=30, delete_folder=True)
+        except Exception as e:
+            logger.warning(f"Failed to save video: {e}")
+
+    def _save_observation(self):
+        """Save collected observation data. Called from stop() so it always runs."""
+        if not self.scenario_dir:
+            return
+        if not self.recorder_observation:
+            return
+        try:
+            observation_file = os.path.join(self.scenario_dir, 'observation.jsonl.gz')
+            with gzip.open(observation_file, "wt", encoding="utf-8") as f:
+                for record in self.recorder_observation:
+                    f.write(json.dumps(record) + "\n")
+            logger.info(f"Saved {len(self.recorder_observation)} observation frames to {observation_file}")
+        except Exception as e:
+            logger.error(f"Failed to save observation: {e}")
+
     def _tick_scenario(self, timestamp):
         """
         Run next tick of scenario and the agent and tick the world.
@@ -481,9 +538,12 @@ class ScenarioManager(object):
                     _agent_action, _agent_log_data = _agent()
                     agent_log_data[_agent_id] = _agent_log_data
                 except Exception as e:
+                    logger.error(f"Agent {_agent_id} error: {e}")
                     traceback.print_exc()
-                    raise RuntimeError(e)
-                
+                    # Emergency stop instead of crashing
+                    _agent_action = carla.VehicleControl(throttle=0.0, brake=1.0)
+                    agent_log_data[_agent_id] = {"error": str(e)}
+
                 # Check if the time trigger is reached
                 _agent_trigger_time = self.scenario_instance.ego_trigger_times.get(_agent_id, 0.0)
                 if exec_timestamp >= _agent_trigger_time:
@@ -572,21 +632,10 @@ class ScenarioManager(object):
         logger.info(f"Successfully setup {len(self.recorder_sensor_list)} recorder sensors")
         
     def _tick_recorder(self, agent_log_data: dict):
-        
-        recorder_save_dir = os.path.join(self.scenario_dir, 'agent')
-        if not os.path.exists(recorder_save_dir):
-            os.makedirs(recorder_save_dir, exist_ok=True)
-            
-        recorder_video_dir = os.path.join(recorder_save_dir, 'video')
-        if not os.path.exists(recorder_video_dir):
-            os.makedirs(recorder_video_dir, exist_ok=True)
-        
-        ######### Save the visualization #########
         if self.require_vis:
             input_data = self.recorder_sensor_interface.get_data(GameTime.get_frame())
             for ego_id, ego_data in input_data.items():
-                
-                ego_save_video_dir = os.path.join(recorder_video_dir, ego_id)
+                ego_save_video_dir = os.path.join(self._recorder_video_dir, ego_id)
                 os.makedirs(ego_save_video_dir, exist_ok=True)
                     
                 # We add some visualization here, can be deleted if not neccesary
@@ -599,7 +648,7 @@ class ScenarioManager(object):
                 # Calculate the new size (half of the original size)
                 new_size = (view_image_size[0] // 2, view_image_size[1] // 2)
                 # Resize the image
-                view_image = view_image.resize(new_size, Image.ANTIALIAS)
+                view_image = view_image.resize(new_size, Image.LANCZOS)
                 view_image.save(os.path.join(ego_save_video_dir, f"{self.step:06d}.png"))
         
         
@@ -634,14 +683,12 @@ class ScenarioManager(object):
             },
         }
         
-        covered_actor_ids = []
-        for ego_id, ego_vehicle in self.scenario_instance.ego_vehicles.items():  
-            # get meta data
-            ego_vehicle = self.scenario_instance.ego_vehicles[ego_id]            
+        covered_actor_ids = set()
+        for ego_id, ego_vehicle in self.scenario_instance.ego_vehicles.items():
             ego_obs = self._recorder_carla_actor(ego_vehicle)
             ego_obs['config_id'] = ego_id
             scene_dict['egos'][ego_id] = ego_obs
-            covered_actor_ids.append(ego_vehicle.id)
+            covered_actor_ids.add(ego_vehicle.id)
             
         # other actors
         config_other_actors = self.scenario_instance.other_actors
@@ -655,7 +702,7 @@ class ScenarioManager(object):
             other_vehicle_info = self._recorder_carla_actor(other_vehicle)
             other_vehicle_info['config_id'] = actor_config_mapper.get(other_vehicle.id, None)
             scene_dict['other_actors']['vehicles'].append(other_vehicle_info)
-            covered_actor_ids.append(other_vehicle.id)
+            covered_actor_ids.add(other_vehicle.id)
             
         # get walkers
         other_walkers = self.ctn_operator.get_world().get_actors().filter('walker*') # filter controller.ai.walker
@@ -665,7 +712,7 @@ class ScenarioManager(object):
             other_walker_info = self._recorder_carla_actor(other_walker)
             other_walker_info['config_id'] = actor_config_mapper.get(other_walker.id, None)
             scene_dict['other_actors']['walkers'].append(other_walker_info)
-            covered_actor_ids.append(other_walker.id)
+            covered_actor_ids.add(other_walker.id)
 
         # get traffic lights
         traffic_lights = self.ctn_operator.get_world().get_actors().filter("traffic.traffic_light*")
@@ -675,7 +722,7 @@ class ScenarioManager(object):
             traffic_light_info = self._recorder_carla_actor(traffic_light)
             traffic_light_info['config_id'] = actor_config_mapper.get(traffic_light.id, None)
             scene_dict['other_actors']['traffic_lights'].append(traffic_light_info)
-            covered_actor_ids.append(traffic_light.id)
+            covered_actor_ids.add(traffic_light.id)
         
         # get traffic signs
         traffic_signs = self.ctn_operator.get_world().get_actors().filter("traffic.traffic_sign*")
@@ -685,7 +732,7 @@ class ScenarioManager(object):
             traffic_sign_info = self._recorder_carla_actor(traffic_sign)
             traffic_sign_info['config_id'] = actor_config_mapper.get(traffic_sign.id, None)
             scene_dict['other_actors']['traffic_signs'].append(traffic_sign_info)
-            covered_actor_ids.append(traffic_sign.id)
+            covered_actor_ids.add(traffic_sign.id)
         
         # get static props
         static_props_info = self._recorder_static_actor(self.ctn_operator.get_world(), actor_config_mapper)
@@ -699,34 +746,39 @@ class ScenarioManager(object):
         self.recorder_observation.append(scene_dict)
         
     def _recorder_carla_actor(self, actor: carla.Actor):
+        transform = actor.get_transform()
+        velocity = actor.get_velocity()
+        acceleration = actor.get_acceleration()
+        angular_velocity = actor.get_angular_velocity()
+
         actor_info = {
             'actor_id': actor.id,
             'attributes': actor.attributes,
             'type_id': actor.type_id,
             'location': [
-                actor.get_transform().location.x,
-                actor.get_transform().location.y,
-                actor.get_transform().location.z
+                transform.location.x,
+                transform.location.y,
+                transform.location.z
             ],
             'rotation': [
-                actor.get_transform().rotation.pitch,
-                actor.get_transform().rotation.roll,
-                actor.get_transform().rotation.yaw
+                transform.rotation.pitch,
+                transform.rotation.roll,
+                transform.rotation.yaw
             ],
             'velocity': [
-                actor.get_velocity().x,
-                actor.get_velocity().y,
-                actor.get_velocity().z
+                velocity.x,
+                velocity.y,
+                velocity.z
             ],
             'acceleration': [
-                actor.get_acceleration().x,
-                actor.get_acceleration().y,
-                actor.get_acceleration().z
+                acceleration.x,
+                acceleration.y,
+                acceleration.z
             ],
             'angular_velocity': [
-                actor.get_angular_velocity().x,
-                actor.get_angular_velocity().y,
-                actor.get_angular_velocity().z
+                angular_velocity.x,
+                angular_velocity.y,
+                angular_velocity.z
             ],
         }
         

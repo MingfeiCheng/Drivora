@@ -142,8 +142,10 @@ class PerceptionAgent(AutonomousAgent):
         gt_velocity = torch.FloatTensor([tick_data['speed']]).to('cuda', dtype=torch.float32) # used by controller
         velocity = gt_velocity.reshape(1, 1) # used by transfuser
 
+        _save_dir = getattr(self, '_bev_save_dir', None)
+        _forward_save_path = os.path.join(_save_dir, 'img') if _save_dir else None
         pred_route_wp, rotated_bb, bboxes, pred_route, pred_traffic_light = self.nets[0].forward_ego(image, lidar_bev, target_point, target_point_image, velocity,
-                                                num_points=num_points, save_path='img/',
+                                                num_points=num_points, save_path=_forward_save_path,
                                                 debug=self.cfg.viz,
                                                 bb_confidence_threshold=0.1,
                                                 tl_threshold=0.5)
@@ -175,7 +177,8 @@ class PerceptionAgent(AutonomousAgent):
             label_raw_tf_new = self.label_raw_tf
             
         if viz_trigger and self.step > 2:
-            create_BEV(self.state_log, label_raw, self.label_raw_tf, gt_traffic_light_hazard, pred_traffic_light, image, lidar_bev, target_point, self.route_buffer, self._vehicle, self.cfg.route_buffer, route_gt_map)
+            _save_dir = getattr(self, '_bev_save_dir', None)
+            create_BEV(self.state_log, label_raw, self.label_raw_tf, gt_traffic_light_hazard, pred_traffic_light, image, lidar_bev, target_point, self.route_buffer, self._vehicle, self.cfg.route_buffer, route_gt_map, save_dir=_save_dir)
 
         self.label_raw_tf = label_raw_tf_new
         self.pred_traffic_light = pred_traffic_light
@@ -771,7 +774,7 @@ class PerceptionAgent(AutonomousAgent):
 #         self.route = self.saved_route
 #         self.is_last = False
 
-def create_BEV(state_log, labels_org, labels_tf, gt_traffic_light_hazard, pred_traffic_light, rgb_image, lidar_bev, target_point, route_buffer, _vehicle, route_buffer_flag,route_gt_map, pix_per_m=5):
+def create_BEV(state_log, labels_org, labels_tf, gt_traffic_light_hazard, pred_traffic_light, rgb_image, lidar_bev, target_point, route_buffer, _vehicle, route_buffer_flag,route_gt_map, pix_per_m=5, save_dir=None):
     s=0
     max_d = 30
     size = int(max_d*pix_per_m*2)
@@ -957,8 +960,12 @@ def create_BEV(state_log, labels_org, labels_tf, gt_traffic_light_hazard, pred_t
     all_images = np.concatenate((rgb_image, all_images), axis=0)
     all_images = Image.fromarray(all_images.astype(np.uint8))
     
-    Path(f'bev_viz2').mkdir(parents=True, exist_ok=True)
-    all_images.save(f'bev_viz2/{time.time()}_{s}.png')
+    if save_dir:
+        bev_dir = os.path.join(save_dir, 'bev_viz2')
+    else:
+        bev_dir = 'bev_viz2'
+    Path(bev_dir).mkdir(parents=True, exist_ok=True)
+    all_images.save(os.path.join(bev_dir, f'{time.time()}_{s}.png'))
 
     # return BEV
 

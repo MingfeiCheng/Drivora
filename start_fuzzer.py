@@ -1,13 +1,16 @@
 import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 import sys
 import hydra
+import multiprocessing as mp
 
 from loguru import logger
 from omegaconf import DictConfig, OmegaConf
 
 from scenario_runner.config import GlobalConfig # this is a global config for the system
 from registry import FUZZER_REGISTRY
-from tools.module_loader import discover_modules
+from registry.utils import discover_modules
 
 def get_version():
     """
@@ -25,8 +28,6 @@ def get_version():
 @hydra.main(config_path='.', config_name='config', version_base=None)
 def main(cfg: DictConfig):
     
-    discover_modules(os.path.dirname(os.path.abspath(__file__)))
-    
     agent_config = cfg.get('agent', None)
     if agent_config is None:
         raise ValueError("Please provide the agent config.")
@@ -39,12 +40,16 @@ def main(cfg: DictConfig):
     if fuzzer_config is None:
         raise ValueError("Please provide the fuzzer config.")
     
-    scenario_type = scenario_config.get('type', None)
     fuzzer_type = fuzzer_config.get('type', None)
+    fuzzer_dir = cfg.get('fuzzer_dir', 'fuzzer')
+
+    discover_modules(os.path.dirname(os.path.abspath(__file__)), fuzzer_dir)
+
 
     GlobalConfig.debug = cfg.debug
     GlobalConfig.pytree_debug = cfg.pytree_debug  # Enable py_trees debug mode
     GlobalConfig.open_vis = cfg.open_vis  # Open visualization
+    GlobalConfig.save_agent_internal = cfg.get('save_agent_internal', False)
     GlobalConfig.parallel_num = cfg.get('distribute_num', 1)  # number of parallel scenarios to run, only for fuzzing
     # setup logger
     level = "DEBUG" if GlobalConfig.debug else "INFO"
@@ -62,7 +67,7 @@ def main(cfg: DictConfig):
     GlobalConfig.carla_is_sync = cfg.carla.is_sync
     GlobalConfig.carla_random_seed = cfg.carla.random_seed
     
-    GlobalConfig.print()
+    GlobalConfig.print_config()
     
     output_root = GlobalConfig.output_root
     if not os.path.exists(output_root):
@@ -74,19 +79,29 @@ def main(cfg: DictConfig):
     OmegaConf.save(config=cfg, f=os.path.join(output_root, 'config.yaml'))
     
     # load testing config    
-    logger.info(f'Fuzzer type: {scenario_type}.{fuzzer_type}')
-    fuzzer_class = FUZZER_REGISTRY.get(f"fuzzer.{scenario_type}.{fuzzer_type}")
+    logger.info(f'Fuzzer type: {fuzzer_type}')
+    fuzzer_class = FUZZER_REGISTRY.get(f"fuzzer.{fuzzer_type}")
     logger.info(f'Load fuzzer class from: {fuzzer_class}')
+    
+    # we set global testing ads conda env & eval scripts
+    GlobalConfig.ads_venv_dir = agent_config.ads_venv_dir
+    GlobalConfig.scenario_executor_script = scenario_config.executor_script
 
     fuzzer_instance = fuzzer_class(
         fuzzer_config,
         agent_config,
         scenario_config
     )
-    fuzzer_instance.run()
-    fuzzer_instance.close()
+    try:
+        fuzzer_instance.run()
+    except KeyboardInterrupt:
+        fuzzer_instance.close()
+    finally:
+        fuzzer_instance.close()
 
 if __name__ == '__main__':
+    # mp.set_start_method("spawn", force=True)
+    
     main()
     logger.info('[:D] -> Fuzzing DONE!')
     sys.exit(0)

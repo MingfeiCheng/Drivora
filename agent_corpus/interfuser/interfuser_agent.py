@@ -218,10 +218,8 @@ class InterfuserAgent(AutonomousAgent):
         self.prev_surround_map = None
 
         self.save_path = None
-        
-        SAVE_PATH = os.path.join(self.scenario_dir, 'agent/internal')
-        
-        if SAVE_PATH is not None:
+
+        if self.internal_save_dir:
             now = datetime.datetime.now()
             # string = pathlib.Path(os.environ["ROUTES"]).stem + "_"
             string = 'default'
@@ -234,7 +232,7 @@ class InterfuserAgent(AutonomousAgent):
 
             print(string)
 
-            self.save_path = pathlib.Path(SAVE_PATH) / string
+            self.save_path = pathlib.Path(self.internal_save_dir) / string
             self.save_path.mkdir(parents=True, exist_ok=False)
             (self.save_path / "meta").mkdir(parents=True, exist_ok=False)
 
@@ -583,7 +581,7 @@ class InterfuserAgent(AutonomousAgent):
         surface = self._hic.run_interface(tick_data)
         tick_data["surface"] = surface
 
-        if SAVE_PATH is not None:
+        if self.save_path is not None:
             self.save(tick_data)
 
         return control, agent_log

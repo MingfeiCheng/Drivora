@@ -19,12 +19,8 @@ from .data import lidar_to_histogram_features, draw_target_point, lidar_bev_cam_
 
 from agent_corpus.atomic.base_agent import AutonomousAgent
 
-SAVE_PATH = os.environ.get('SAVE_PATH')
-
-if not SAVE_PATH:
-    SAVE_PATH = None
-else:
-    pathlib.Path(SAVE_PATH).mkdir(parents=True, exist_ok=True)
+# SAVE_PATH is controlled by internal_save_dir via setup(), not env var
+SAVE_PATH = None
 
 
 class HybridAgent(AutonomousAgent):
@@ -103,9 +99,13 @@ class HybridAgent(AutonomousAgent):
         self.steer_damping = self.config.steer_damping
         self.rgb_back = None #For debugging
 
-        SAVE_PATH = os.path.join(self.scenario_dir, 'agent/internal')
-        if not os.path.exists(SAVE_PATH):
-            os.makedirs(SAVE_PATH)
+        global SAVE_PATH
+        if self.internal_save_dir:
+            SAVE_PATH = self.internal_save_dir
+            os.makedirs(SAVE_PATH, exist_ok=True)
+            self.config.debug = True  # enable model visualization when saving internal data
+        else:
+            SAVE_PATH = None
 
 
     def _init(self):

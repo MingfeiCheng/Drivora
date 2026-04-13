@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+import os
 import carla
 
 import json
@@ -34,22 +35,31 @@ class AutonomousAgent(object):
         self.sensor_interface = SensorInterface()
     
     def setup_env(
-        self, 
-        id, 
-        vehicle, 
-        ctn_operator: CtnSimOperator, 
-        scenario_dir: str, 
-        ego_config: str
+        self,
+        id,
+        vehicle,
+        ctn_operator: CtnSimOperator,
+        scenario_dir: str,
+        ego_config: str,
+        save_internal: bool = False,
     ):
         """
-        Bid the actor id in the carla world
-        NOTE: MUST be called before setup() to set the actor id
+        Bind the actor id in the carla world.
+        If save_internal=True, agent saves internal data to scenario_dir/agent/internal/.
         """
         self.id = id
         self.carla_actor = vehicle
         self.ctn_operator = ctn_operator
         self.scenario_dir = scenario_dir
-        
+        self.save_internal = save_internal
+
+        # Set up internal save directory
+        if self.save_internal and self.scenario_dir:
+            self.internal_save_dir = os.path.join(self.scenario_dir, 'agent', 'internal')
+            os.makedirs(self.internal_save_dir, exist_ok=True)
+        else:
+            self.internal_save_dir = None
+
         self.setup(ego_config)
         
     def setup(self, path_to_conf_file):

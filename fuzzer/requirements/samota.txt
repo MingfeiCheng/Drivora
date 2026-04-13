@@ -1,0 +1,11 @@
+# SAMOTA — surrogate-assisted multi-objective testing
+numpy
+deap
+shapely
+loguru
+omegaconf
+tqdm
+pydantic
+scikit-learn
+joblib
+hdbscan

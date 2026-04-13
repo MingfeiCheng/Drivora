@@ -1,0 +1,15 @@
+*~
+*.json
+*.pyc
+*.log
+*.csv
+*.ipynb
+*.dot
+dependencies/
+pylot/prediction/prediction/
+
+# Generated documentation files
+/doc/build
+.idea/
+venv/
+erdos_pylot.egg-info/

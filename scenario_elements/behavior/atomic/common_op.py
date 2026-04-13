@@ -4,8 +4,11 @@ import copy
 import carla
 import operator
 import py_trees
+from loguru import logger
 
 from tools.timer import GameTime
+
+from scenario_runner.ctn_operator import CtnSimOperator
 
 from .base import AtomicBehavior
 
@@ -51,7 +54,7 @@ class Idle(AtomicBehavior):
         """
         Setup actor
         """
-        super(Idle, self).__init__(name)
+        super().__init__(name)
         self._duration = duration
         self._start_time = 0
         self.logger.debug("%s.__init__()" % (self.__class__.__name__))
@@ -61,7 +64,7 @@ class Idle(AtomicBehavior):
         Set start time
         """
         self._start_time = GameTime.get_time()
-        super(Idle, self).initialise()
+        super().initialise()
 
     def update(self):
         """
@@ -99,7 +102,7 @@ class ActorTransformSetter(AtomicBehavior):
         """
         Init
         """
-        super(ActorTransformSetter, self).__init__(name, actor)
+        super().__init__(name, actor)
         self._transform = transform
         self._physics = physics
         self.logger.debug("%s.__init__()" % (self.__class__.__name__))
@@ -109,7 +112,7 @@ class ActorTransformSetter(AtomicBehavior):
             self._actor.set_target_velocity(carla.Vector3D(0, 0, 0))
             self._actor.set_target_angular_velocity(carla.Vector3D(0, 0, 0))
             self._actor.set_transform(self._transform)
-        super(ActorTransformSetter, self).initialise()
+        super().initialise()
 
     def update(self):
         """
@@ -118,7 +121,7 @@ class ActorTransformSetter(AtomicBehavior):
         new_status = py_trees.common.Status.RUNNING
 
         if not self._actor.is_alive:
-            new_status = py_trees.common.Status.FAILURE
+            new_status = py_trees.common.Status.SUCCESS
 
         if self._actor and self._actor.is_alive and self._transform:
             if calculate_distance(self._actor.get_location(), self._transform.location) < 1.0:
@@ -140,16 +143,53 @@ class ActorDestroy(AtomicBehavior):
     The behavior terminates after removing the actor
     """
 
-    def __init__(self, actor, name="ActorDestroy"):
+    def __init__(self, actor, ctn_operator: CtnSimOperator, name="ActorDestroy"):
         """
         Setup actor
         """
-        super(ActorDestroy, self).__init__(name, actor)
+        super().__init__(name, actor)
+        self._ctn_operator = ctn_operator
+        
         self.logger.debug("%s.__init__()" % (self.__class__.__name__))
 
     def update(self):
         new_status = py_trees.common.Status.RUNNING
         if self._actor:
+            try:
+                if self._actor.is_alive:
+                    self._ctn_operator.remove_actor(self._actor)
+            except RuntimeError:
+                pass  # actor already destroyed
+            self._actor = None
+            new_status = py_trees.common.Status.SUCCESS
+
+        return new_status
+    
+class ActorDiedeDestroy(AtomicBehavior):
+
+    """
+    This class contains an actor destroy behavior.
+    Given an actor this behavior will delete it.
+
+    Important parameters:
+    - actor: CARLA actor to be deleted
+
+    The behavior terminates after removing the actor
+    """
+
+    def __init__(self, actor, ctn_operator: CtnSimOperator, name="ActorDestroy"):
+        """
+        Setup actor
+        """
+        super().__init__(name, actor)
+        self._ctn_operator = ctn_operator
+        
+        self.logger.debug("%s.__init__()" % (self.__class__.__name__))
+
+    def update(self):
+        new_status = py_trees.common.Status.RUNNING
+        if self._actor and not self._actor.is_alive:
+            self._ctn_operator.remove_actor(self._actor)
             self._actor = None
             new_status = py_trees.common.Status.SUCCESS
 

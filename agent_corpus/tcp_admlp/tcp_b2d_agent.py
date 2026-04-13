@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import datetime
 import pathlib
@@ -6,6 +7,10 @@ import time
 import cv2
 import carla
 from collections import deque
+
+_AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _AGENT_DIR not in sys.path:
+    sys.path.insert(0, _AGENT_DIR)
 import math
 from collections import OrderedDict
 
@@ -75,8 +80,7 @@ class TCPAgent(AutonomousAgent):
 
 		self.last_steers = deque()
 		# self.lat_ref, self.lon_ref = 42.0, 2.0
-		SAVE_PATH = os.path.join(self.scenario_dir, 'agent/internal')
-		if SAVE_PATH is not None:
+		if self.internal_save_dir:
 			now = datetime.datetime.now()
 			# string = pathlib.Path(os.environ['ROUTES']).stem + '_'
 			# string += self.save_name
@@ -84,7 +88,7 @@ class TCPAgent(AutonomousAgent):
 
 			print (string)
 
-			self.save_path = pathlib.Path(SAVE_PATH) / string
+			self.save_path = pathlib.Path(self.internal_save_dir) / string
 			self.save_path.mkdir(parents=True, exist_ok=False)
 
 			(self.save_path / 'rgb').mkdir()
@@ -276,9 +280,9 @@ class TCPAgent(AutonomousAgent):
 		# if throttle_traj > brake_traj: brake_traj = 0.0
 
 		control = carla.VehicleControl()
-		if not PLANNER_TYPE: 
-			raise 'please set PLANNER_TYPE'
-		if PLANNER_TYPE == 'only_traj':
+		planner_type = PLANNER_TYPE if PLANNER_TYPE else 'merge_ctrl_traj'
+
+		if planner_type == 'only_traj':
 			self.pid_metadata = metadata_traj
 			self.pid_metadata['agent'] = 'only_traj'
 			control.steer = np.clip(float(steer_traj), -1, 1)
@@ -287,7 +291,7 @@ class TCPAgent(AutonomousAgent):
 			# self.pid_metadata['steer'] = control.steer
 			# self.pid_metadata['throttle'] = control.throttle
 			# self.pid_metadata['brake'] = control.brake
-		elif PLANNER_TYPE == 'only_ctrl':
+		elif planner_type == 'only_ctrl':
 			self.pid_metadata = metadata
 			self.pid_metadata['agent'] = 'only_ctrl'
 			control.steer = np.clip(float(steer_ctrl), -1, 1)
@@ -296,7 +300,7 @@ class TCPAgent(AutonomousAgent):
 			# self.pid_metadata['steer'] = control.steer
 			# self.pid_metadata['throttle'] = control.throttle
 			# self.pid_metadata['brake'] = control.brake
-		elif PLANNER_TYPE == 'merge_ctrl_traj':
+		elif planner_type == 'merge_ctrl_traj':
 			# traj only using when brake
 			self.pid_metadata = metadata_traj
 			self.pid_metadata['agent'] = 'merge_ctrl_traj'
@@ -335,7 +339,7 @@ class TCPAgent(AutonomousAgent):
 		self.pid_metadata['brake'] = control.brake
 		metric_info = self.get_metric_info()
 		self.metric_info[self.step] = metric_info
-		if SAVE_PATH is not None and self.step % 1 == 0:
+		if self.save_path is not None and self.step % 1 == 0:
 			self.save(tick_data)
 		return control, agent_log
 

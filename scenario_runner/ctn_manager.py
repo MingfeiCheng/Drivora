@@ -89,6 +89,10 @@ class CtnManager:
         for op in self._all_ops:
             self.queue.put(op)
 
+    @property
+    def capacity(self):
+        return len(self._all_ops)
+
     def acquire(self, block=True, timeout=None):
         op_config = self.queue.get(block=block, timeout=timeout)
         return op_config
@@ -96,18 +100,13 @@ class CtnManager:
     def release(self, operator):
         self.queue.put(operator)
 
-    def shutdown(self, stop_ops: bool = True):
-        if stop_ops:
-            for op in self._all_ops:
-                try:
-                    op.stop()
-                except Exception as e:
-                    logger.warning(f"[WARN] Failed to stop {op}: {e}")
-
+    def shutdown(self):
         self.manager.shutdown()
 
 if __name__ == "__main__":
-    # 假设有3个容器
-    containers = [("127.0.0.1", 2000+i) for i in range(3)]
-    cm = CtnManager(containers)
+    configs = [
+        CtnConfig(idx=i, container_name=f"test_ctn_{i}", gpu=0)
+        for i in range(3)
+    ]
+    cm = CtnManager(configs)
     cm.shutdown()

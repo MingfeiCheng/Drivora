@@ -127,7 +127,7 @@ class LocalPlanner(object):
         # Compute the current vehicle waypoint
         current_waypoint = self._map.get_waypoint(self._vehicle.get_location())
         self.target_waypoint, self.target_road_option = (current_waypoint, RoadOption.LANEFOLLOW)
-        self._waypoints_queue.append((self.target_waypoint, self.target_road_option))
+        self._waypoints_queue.append((self.target_waypoint, self.target_road_option, 0.0)) # init with 0 speed
 
     def set_speed(self, speed):
         """
@@ -137,8 +137,7 @@ class LocalPlanner(object):
         :return:
         """
         if self._follow_speed_limits:
-            print("WARNING: The max speed is currently set to follow the speed limits. "
-                  "Use 'follow_speed_limits' to deactivate this")
+            pass  # speed limits take precedence when follow_speed_limits is active
         self._target_speed = speed
 
     def follow_speed_limits(self, value=True):
@@ -206,6 +205,9 @@ class LocalPlanner(object):
                 continue
             elem_location = carla.Location(x=elem.x, y=elem.y, z=elem.z)
             elem_waypoint = self._map.get_waypoint(elem_location, project_to_road=False, lane_type=carla.LaneType.Any)
+            
+            if elem_waypoint is None:
+                continue
             
             try:
                 new_elem = (elem_waypoint, RoadOption[elem.road_option], elem.speed * 3.6) # convert to km/h
@@ -286,7 +288,7 @@ class LocalPlanner(object):
                 wpt, direction, speed = self._waypoints_queue[-1]
                 return wpt, direction, speed
             except IndexError as i:
-                return None, RoadOption.VOID
+                return None, RoadOption.VOID, 0.0 # empty queue
 
     def done(self):
         """

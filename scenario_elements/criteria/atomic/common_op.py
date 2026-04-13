@@ -25,7 +25,7 @@ class SimulationTimeCondition(py_trees.behaviour.Behaviour):
         """
         Setup timeout
         """
-        super(SimulationTimeCondition, self).__init__(name)
+        super().__init__(name)
         self.logger.debug("%s.__init__()" % (self.__class__.__name__))
         self._timeout_value = timeout
         self._start_time = 0.0
@@ -71,7 +71,7 @@ class TimeOut(SimulationTimeCondition):
         """
         Setup timeout
         """
-        super(TimeOut, self).__init__(timeout, name=name)
+        super().__init__(timeout, name=name)
         self.timeout = False
 
     def update(self):
@@ -79,7 +79,7 @@ class TimeOut(SimulationTimeCondition):
         Upon reaching the timeout value the status changes to SUCCESS
         """
 
-        new_status = super(TimeOut, self).update()
+        new_status = super().update()
 
         if new_status == py_trees.common.Status.SUCCESS:
             self.timeout = True
@@ -114,7 +114,7 @@ class CollisionTest(Criterion):
         """
         self.ctn_operator = ctn_operator
         
-        super(CollisionTest, self).__init__(name, actor, optional, terminate_on_failure)
+        super().__init__(name, actor, optional, terminate_on_failure)
         self.logger.debug("%s.__init__()" % (self.__class__.__name__))
         self._other_actor = other_actor
         self._other_actor_type = other_actor_type
@@ -133,7 +133,7 @@ class CollisionTest(Criterion):
         blueprint = world.get_blueprint_library().find('sensor.other.collision')
         self._collision_sensor = world.spawn_actor(blueprint, carla.Transform(), attach_to=self.actor)
         self._collision_sensor.listen(lambda event: self._count_collisions(event))
-        super(CollisionTest, self).initialise()
+        super().initialise()
 
     def update(self):
         """
@@ -169,7 +169,7 @@ class CollisionTest(Criterion):
             self._collision_sensor.stop()
             self._collision_sensor.destroy()
         self._collision_sensor = None
-        super(CollisionTest, self).terminate(new_status)
+        super().terminate(new_status)
 
     def _count_collisions(self, event):     # pylint: disable=too-many-return-statements
         """Update collision count"""
@@ -316,7 +316,7 @@ class RouteCompletionTest(Criterion):
         """
         """
         self.ctn_operator = ctn_operator
-        super(RouteCompletionTest, self).__init__(name, actor, terminate_on_failure=terminate_on_failure)
+        super().__init__(name, actor, terminate_on_failure=terminate_on_failure)
         self.units = "%"
         self.success_value = 100
         self._route = route
@@ -401,7 +401,7 @@ class RouteCompletionTest(Criterion):
 
         if self.test_status == "INIT":
             self.test_status = "FAILURE"
-        super(RouteCompletionTest, self).terminate(new_status)
+        super().terminate(new_status)
         
 class RunningStopTest(Criterion):
 
@@ -420,7 +420,7 @@ class RunningStopTest(Criterion):
         """
         """
         self.ctn_operator = ctn_operator
-        super(RunningStopTest, self).__init__(name, actor, terminate_on_failure=terminate_on_failure)
+        super().__init__(name, actor, terminate_on_failure=terminate_on_failure)
         self._world = self.ctn_operator.get_world()
         self._map = self.ctn_operator.get_map()
         self._list_stop_signs = []
@@ -580,7 +580,7 @@ class RunningRedLightTest(Criterion):
         Init
         """
         self.ctn_operator = ctn_operator
-        super(RunningRedLightTest, self).__init__(name, actor, terminate_on_failure=terminate_on_failure)
+        super().__init__(name, actor, terminate_on_failure=terminate_on_failure)
         self._world = self.ctn_operator.get_world()
         self._map = self.ctn_operator.get_map()
         self._list_traffic_lights = []

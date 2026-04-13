@@ -138,7 +138,9 @@ class LingoAgent(AutonomousAgent):
         self.route_planner_min_distance = 7.5
 
         #load config from .hydra folder
-        self.config_load_path = Path(self.config_path).parent.parent.parent / '.hydra' / 'config.yaml'
+        # .hydra/config.yaml is at: <agent_dir>/simlingo/.hydra/config.yaml
+        _agent_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+        self.config_load_path = _agent_dir / 'simlingo' / '.hydra' / 'config.yaml'
         with open(self.config_load_path, 'r') as file:
             cfg = OmegaConf.load(file)
         self.cfg = cfg
@@ -202,12 +204,8 @@ class LingoAgent(AutonomousAgent):
         self.state_log = deque(maxlen=max((self.lidar_seq_len * self.data_save_freq), 2))
 
         # Path to where visualizations and other debug output gets stored
-        self.save_path = os.path.join(self.scenario_dir, 'agent/internal') # os.environ.get('SAVE_PATH') + self.save_path_root
-        
-        # self.checkpoint_path = os.environ.get('CHECKPOINT_ENDPOINT').
+        self.save_path = self.internal_save_dir  # None if save_internal=False
 
-        # Logger that generates logs used for infraction replay in the results_parser.
-        # if self.save_path is not None and route_index is not None:
         route_index = pathlib.Path('default')
         if self.save_path is not None:
             self.save_path = pathlib.Path(self.save_path) / route_index

@@ -1,13 +1,39 @@
 #!/bin/bash
-set -e  # Exit on error
+# Orion — uv + Python 3.8 + CARLA >= 0.9.12
+set -e
 
-export CUDA_HOME=/usr/local/cuda-11 # can replace yours
+# Auto-detect CUDA
+if [ -d "/usr/local/cuda" ]; then
+    export CUDA_HOME=/usr/local/cuda
+elif [ -d "/usr/local/cuda-12" ]; then
+    export CUDA_HOME=/usr/local/cuda-12
+elif [ -d "/usr/local/cuda-11" ]; then
+    export CUDA_HOME=/usr/local/cuda-11
+fi
+export PATH=$CUDA_HOME/bin:$PATH
 
-pip install torch==2.4.1+cu118 torchvision==0.19.1+cu118 torchaudio==2.4.1 --index-url https://download.pytorch.org/whl/cu118
+# Detect CUDA version to match torch variant
+CUDA_VER=$(nvcc --version 2>/dev/null | grep -oP 'release \K[0-9]+\.[0-9]+' || echo "11.8")
+CUDA_MAJOR=$(echo "$CUDA_VER" | cut -d. -f1)
 
-pip install -e "$(dirname "$0")"
+if [ "$CUDA_MAJOR" -ge 12 ]; then
+    TORCH_CUDA="cu121"
+    echo "[INFO] Detected CUDA $CUDA_VER → using torch+cu121"
+else
+    TORCH_CUDA="cu118"
+    echo "[INFO] Detected CUDA $CUDA_VER → using torch+cu118"
+fi
 
-# load weights
+uv pip install --upgrade setuptools wheel
+uv pip install "torch==2.4.1+${TORCH_CUDA}" "torchvision==0.19.1+${TORCH_CUDA}" "torchaudio==2.4.1+${TORCH_CUDA}" --index-url "https://download.pytorch.org/whl/${TORCH_CUDA}"
+
+# Install flash-attn build dependencies then flash-attn itself
+uv pip install ninja psutil packaging
+uv pip install flash-attn --no-build-isolation
+
+uv pip install --no-build-isolation -e "$(dirname "$0")"
+
+# Download weights
 cd "$(dirname "$0")"
 mkdir -p ckpts
 
@@ -15,27 +41,15 @@ REPO="poleyzdk/Orion"
 LOCAL_DIR="ckpts"
 
 echo "[INFO] Downloading HuggingFace repo: $REPO"
-echo "[INFO] Target local dir: $LOCAL_DIR"
 
-# Ensure hf is installed
 if ! command -v hf &> /dev/null; then
-    echo "[INFO] Installing huggingface_hub..."
-    pip install --upgrade huggingface_hub
+    uv pip install --upgrade "huggingface_hub[cli]"
 fi
 
-# Fix cache permissions
-CACHE_DIR="$HOME/.cache/huggingface"
-if [ -d "$CACHE_DIR" ]; then
-    echo "[INFO] Fixing HuggingFace cache permissions..."
-    sudo chown -R "$(whoami)" "$CACHE_DIR"
-fi
-
-# Check if --resume-download is supported
-if hf download --help 2>&1 | grep -q -- "--resume-download"; then
-    hf download "$REPO" --local-dir "$LOCAL_DIR" --repo-type model --resume-download
-else
-    echo "[WARN] --resume-download not supported in this version, falling back..."
+if [ "${SKIP_DOWNLOAD:-0}" != "1" ] && [ -z "$(ls -A "$LOCAL_DIR" 2>/dev/null)" ]; then
     hf download "$REPO" --local-dir "$LOCAL_DIR" --repo-type model
+else
+    echo "[INFO] Skipping checkpoint download."
 fi
 
 echo "[SUCCESS] Repo downloaded to: $LOCAL_DIR"

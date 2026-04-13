@@ -1,0 +1,9 @@
+# RandomMultiFuzzer — multi-ego random scenario fuzzer
+# No extra deps beyond base requirements.txt
+numpy
+deap
+shapely
+loguru
+omegaconf
+tqdm
+pydantic

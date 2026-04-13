@@ -1,0 +1,10 @@
+{
+    "container_host": "localhost",
+    "base_port": 12667,
+    "jpeg_quality": 90,
+    "docker_image": "drivora/pylot:latest",
+    "container_name_prefix": "drivora-pylot",
+    "gpu": 2,
+    "pylot_config": "configs/drivora.conf",
+    "auto_stop_container": false
+}

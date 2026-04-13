@@ -1,18 +1,10 @@
 import py_trees
 import numpy as np
 
-from .atomic.base import Criterion
+from .atomic.base import Criterion, to_numpy
 from .atomic.traffic_events import TrafficEvent, TrafficEventType
-
+from tools.timer import GameTime
 from scenario_runner.ctn_operator import CtnSimOperator
-
-def to_numpy(vec):
-    """
-    Convert a carla.Vector3D to a numpy array
-    if use Carla version < 0.9.14, uncomment the return line
-    """
-    return np.array([vec.x, vec.y, vec.z])
-    # return vec
     
 class RouteCompletionTest(Criterion):
 
@@ -29,11 +21,13 @@ class RouteCompletionTest(Criterion):
     # Thresholds to return that a route has been completed
     DISTANCE_THRESHOLD = 10.0  # meters
     PERCENTAGE_THRESHOLD = 95  # %
+    PERCENTAGE_THRESHOLD_LOW = 90  # %
+    DIST2DEST_THRESHOLD = 3.0  # meters
 
     def __init__(self, actor, route, ctn_operator: CtnSimOperator, name="RouteCompletionTest", terminate_on_failure=False):
         """
         """
-        super(RouteCompletionTest, self).__init__(name, actor, terminate_on_failure=terminate_on_failure)
+        super().__init__(name, actor, terminate_on_failure=terminate_on_failure)
         self.units = "%"
         self.success_value = 100
         self._route = route
@@ -69,7 +63,7 @@ class RouteCompletionTest(Criterion):
             accum_meters.append(d + new_d)
             prev_loc = tran.location
 
-        max_dist = accum_meters[-1]
+        max_dist = accum_meters[-1] + 1e-8  # To avoid division by zero
         return [x / max_dist * 100 for x in accum_meters]
 
     def update(self):
@@ -104,14 +98,16 @@ class RouteCompletionTest(Criterion):
 
             dist2dest = location.distance(self.target_location)
             
-            if self.actual_value > self.PERCENTAGE_THRESHOLD \
-                    and dist2dest < self.DISTANCE_THRESHOLD:
+            if (self.actual_value > self.PERCENTAGE_THRESHOLD and dist2dest < self.DISTANCE_THRESHOLD) or (dist2dest <= self.DIST2DEST_THRESHOLD and self.actual_value >= self.PERCENTAGE_THRESHOLD_LOW):
                 self.test_status = "SUCCESS"
                 self.actual_value = 100
             
             self.st_detail = {
                 "occurred": self.test_status == "SUCCESS",
                 "details": {
+                    "id": self.actor.id,
+                    "frame": GameTime.get_frame(),
+                    "timestamp": GameTime.get_time(),
                     "final_location": {
                         'x': location.x,
                         'y': location.y,
@@ -140,4 +136,4 @@ class RouteCompletionTest(Criterion):
 
         if self.test_status == "INIT":
             self.test_status = "FAILURE"
-        super(RouteCompletionTest, self).terminate(new_status)
+        super().terminate(new_status)

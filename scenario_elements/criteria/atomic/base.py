@@ -32,7 +32,7 @@ class Criterion(py_trees.behaviour.Behaviour):
                  actor,
                  optional=False,
                  terminate_on_failure=False):
-        super(Criterion, self).__init__(name)
+        super().__init__(name)
         self.logger.debug("%s.__init__()" % (self.__class__.__name__))
 
         self.name = name

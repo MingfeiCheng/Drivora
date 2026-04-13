@@ -109,13 +109,12 @@ class OrionAgent(AutonomousAgent):
         control.throttle = 0.0
         control.brake = 0.0	
         self.prev_control = control
-        # if SAVE_PATH is not None:
-        if self.scenario_dir is not None:
+        if self.internal_save_dir:
             now = datetime.datetime.now()
             # string = pathlib.Path(os.environ['ROUTES']).stem + '_'
             string = self.save_name
             # self.save_path = pathlib.Path(os.environ['SAVE_PATH']) / string
-            self.save_path = pathlib.Path(os.path.join(self.scenario_dir, 'agent/internal')) / string
+            self.save_path = pathlib.Path(self.internal_save_dir) / string
             self.save_path.mkdir(parents=True, exist_ok=False)
             (self.save_path / 'rgb_front').mkdir()
             (self.save_path / 'rgb_front_right').mkdir()

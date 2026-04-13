@@ -1,0 +1,46 @@
+
+# Debug config for Pylot agent + Town02
+
+feedback:
+  scale_collision: 10.0
+  scale_stuck: 180.0
+  scale_destination: 20.0
+
+oracle:
+  collision_recheck: true
+
+mutator:
+
+scenario_space:
+
+  map_region_space:
+    town: "Town02"
+    region_x_min: 40.0
+    region_x_max: 125.0
+    region_y_min: 200.0
+    region_y_max: 295.0
+
+  ego_space:
+    route_length:
+      - 50.0
+      - 150.0
+    ego_task_assignment: "LEFT"
+    corssing_junction: true
+
+  npc_vehicle_space:
+    num:
+      - 1
+      - 3
+    route_length:
+      - 40.0
+      - 200.0
+
+  npc_pedestrian_space:
+    num:
+      - 0
+      - 2
+
+  npc_static_space:
+    num:
+      - 0
+      - 1

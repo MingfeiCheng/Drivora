@@ -1,0 +1,11 @@
+# BehAVExplor — coverage-guided scenario fuzzer
+numpy
+deap
+shapely
+loguru
+omegaconf
+tqdm
+pydantic
+scipy
+scikit-learn
+joblib

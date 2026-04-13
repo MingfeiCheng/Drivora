@@ -1,0 +1,64 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Drivora Pylot — Server Image
+#
+# Two ways to use:
+#   1. Build on top of a pre-built pylot base image:
+#      docker build --build-arg BASE_IMAGE=erdosproject/pylot:latest ...
+#   2. Build the base first using the existing Dockerfile, then overlay:
+#      docker build -t erdosproject/pylot -f Dockerfile .
+#      docker build -t drivora/pylot -f Dockerfile.drivora ..
+#
+# The ".." context is source_code/ (parent of docker/).
+# ═══════════════════════════════════════════════════════════════════════════
+
+ARG BASE_IMAGE=erdosproject/pylot:latest
+FROM ${BASE_IMAGE}
+
+USER erdos
+WORKDIR /home/erdos/workspace/pylot/
+
+# ── Extra Python deps for ZMQ communication ──────────────────────────────
+# NOTE: The base image has opencv built with GPU/GStreamer support.
+# If a pip opencv was previously installed, remove it to avoid conflicts.
+RUN python3 -m pip uninstall -y opencv-python opencv-python-headless opencv-contrib-python 2>/dev/null; true
+# carla pip package needed for carla.Map() to parse opendrive XML.
+# The base image only has a py3.7 egg which doesn't work with py3.8.
+RUN python3 -m pip install --no-cache-dir \
+    carla==0.9.15 \
+    loguru \
+    pyzmq \
+    msgpack \
+    msgpack-numpy \
+    networkx
+
+# ── Rebuild planners (fresh clone + compile) ─────────────────────────────
+ENV PYLOT_HOME=/home/erdos/workspace/pylot/
+RUN cd ${PYLOT_HOME}/dependencies/ && \
+    rm -rf frenet_optimal_trajectory_planner && \
+    git clone https://github.com/erdos-project/frenet_optimal_trajectory_planner.git && \
+    cd frenet_optimal_trajectory_planner && bash build.sh
+
+RUN cd ${PYLOT_HOME}/dependencies/ && \
+    rm -rf rrt_star_planner && \
+    git clone https://github.com/erdos-project/rrt_star_planner.git && \
+    cd rrt_star_planner && bash build.sh
+
+RUN cd ${PYLOT_HOME}/dependencies/ && \
+    rm -rf hybrid_astar_planner && \
+    git clone https://github.com/erdos-project/hybrid_astar_planner.git && \
+    cd hybrid_astar_planner && bash build.sh
+
+# ── Copy server code + config ────────────────────────────────────────────
+COPY --chown=erdos:erdos pylot_server.py /home/erdos/workspace/pylot/pylot_server.py
+COPY --chown=erdos:erdos configs/drivora.conf /home/erdos/workspace/pylot/configs/drivora.conf
+
+# ── Set PYTHONPATH (base image only sets this in .bashrc, not in ENV) ────
+ENV PYLOT_HOME=/home/erdos/workspace/pylot/
+ENV PYTHONPATH="/home/erdos/workspace/pylot/dependencies/:/home/erdos/workspace/pylot/dependencies/lanenet:/home/erdos/workspace/pylot/dependencies/CARLA_0.9.10.1/PythonAPI/carla/:/home/erdos/workspace/pylot/dependencies/CARLA_0.9.10.1/PythonAPI/carla/agents/:/home/erdos/workspace/pylot/dependencies/CARLA_0.9.10.1/PythonAPI/"
+
+# ── Expose ZMQ port ──────────────────────────────────────────────────────
+EXPOSE 12667
+
+# ── Default entrypoint ───────────────────────────────────────────────────
+ENTRYPOINT ["python3", "/home/erdos/workspace/pylot/pylot_server.py"]
+CMD ["--config", "/home/erdos/workspace/pylot/configs/drivora.conf", "--port", "12667"]

@@ -65,6 +65,8 @@ class ActorBlockedTest(Criterion):
                         self._best_time = delta_time
                         if not self.st_detail['occurred']:
                             self.st_detail['details'] = {
+                                "id": self.actor.id,
+                                "frame": GameTime.get_frame(),
                                 "timestamp": GameTime.get_time(),
                                 "location": {
                                     "x": self.actor.get_location().x,
@@ -93,6 +95,8 @@ class ActorBlockedTest(Criterion):
                         self.st_detail = {
                             "occurred": True,
                             "details": {
+                                "id": self.actor.id,
+                                "frame": GameTime.get_frame(),
                                 "timestamp": GameTime.get_time(),
                                 "location": {
                                     "x": vehicle_location.x,

@@ -1,0 +1,8 @@
+# AVFuzzer — GA-based scenario fuzzer
+numpy
+deap
+shapely
+loguru
+omegaconf
+tqdm
+pydantic

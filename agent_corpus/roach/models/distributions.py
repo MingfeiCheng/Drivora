@@ -223,6 +223,8 @@ class BetaDistribution():
         return self
 
     def log_prob(self, actions: th.Tensor) -> th.Tensor:
+        # Clamp to open interval (eps, 1-eps) to avoid NaN/Inf in Beta.log_prob
+        actions = th.clamp(actions, 1e-6, 1.0 - 1e-6)
         log_prob = self.distribution.log_prob(actions)
         return sum_independent_dims(log_prob)
 

@@ -1,0 +1,2 @@
+# Extra dependencies for the random fuzzer
+# Base deps (loguru, shapely, deap, etc.) are in the root requirements.txt

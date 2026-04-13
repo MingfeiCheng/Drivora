@@ -1,0 +1,88 @@
+
+# algorithm
+population_size: 1
+coverage_threshold: 0.0
+clip_train_frequency: 5
+start_steps: 5
+
+feedback:
+  skip_start_frame: 10
+
+  # coverage - template (should align with mutator)
+  t_max_objects: 8
+  t_time_horizon: 6.0
+  t_frequency: 5
+
+oracle:
+  # oracle config
+  collision_speed_threshold_ego: 0.01
+  collision_speed_threshold_npc: 1.0
+  collision_degree: 90.0
+  skip_start_frame: 10
+
+mutator:
+  # spatial mutation
+  mutate_ego_prob: 0.5
+  mutate_npc_vehicle_prob: 0.5
+  mutate_npc_walker_prob: 0.5
+  mutate_npc_static_prob: 0.5
+  mutate_traffic_light_prob: 0.5
+  # temporal mutation
+  speed_std: 2.0
+  time_std: 0.5
+  position_std: 2.0
+  weather_std: 0.1
+  # clip
+  clip_latent_dim: 64
+  clip_train_epochs: 50
+  clip_learning_rate: 0.0001
+  clip_batch_size: 64
+  # template (should align with feedback)
+  t_max_objects: 8
+  t_time_horizon: 6.0
+  t_frequency: 5
+  # sampling
+  candidate_buffer_size: 40
+  temporal_mutation_prob: 0.5
+  
+scenario_space:
+
+  map_region_space:
+    # T-Junction
+    town: "Town02"
+    region_x_min: 40.0
+    region_x_max: 125.0
+    region_y_min: 200.0
+    region_y_max: 295.0
+
+  ego_space:
+    
+    # route length
+    route_length:
+      - 80.0
+      - 200.0
+
+    ego_task_assignment: "LEFT"
+    corssing_junction: true
+
+  npc_vehicle_space:
+    
+    route_length:
+      - 40.0
+      - 400.0
+
+    num:
+      - 0
+      - 5
+  
+  npc_pedestrian_space:
+    num:
+      - 0
+      - 10
+
+  npc_static_space:
+    num:
+      - 0
+      - 1
+
+  

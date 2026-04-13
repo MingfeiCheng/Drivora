@@ -32,7 +32,7 @@ class GlobalConfig:
         return scenario_folder
     
     @staticmethod
-    def print():
+    def print_config():
         print("Global Config [Carla]:")
         print(f"  run_tag: {GlobalConfig.run_tag}")
         print(f"  debug: {GlobalConfig.debug}")
@@ -45,4 +45,4 @@ class GlobalConfig:
         print(f"  carla_fps: {GlobalConfig.carla_fps}")
         print(f"  carla_is_sync: {GlobalConfig.carla_is_sync}")
         print(f"  carla_random_seed: {GlobalConfig.carla_random_seed}")
-        print(f"  distribute_num: {GlobalConfig.parallel_num}")
+        print(f"  parallel_num: {GlobalConfig.parallel_num}")

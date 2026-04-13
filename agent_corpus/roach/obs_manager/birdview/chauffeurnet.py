@@ -102,23 +102,18 @@ class ObsManager():
             c_ev = abs(ev_loc.x - w.location.x) < 1.0 and abs(ev_loc.y - w.location.y) < 1.0
             return c_distance and (not c_ev)
 
-        # update to new carla - 0.9.15
-        # car_bbox_list = self._world.get_level_bbs(carla.CityObjectLabel.Car)
-        # bus_bbox_list = self._world.get_level_bbs(carla.CityObjectLabel.Bus)
-        # truck_bbox_list = self._world.get_level_bbs(carla.CityObjectLabel.Truck)
-        # motorcycle_bbox_list = self._world.get_level_bbs(carla.CityObjectLabel.Motorcycle)
-        # bicycle_bbox_list = self._world.get_level_bbs(carla.CityObjectLabel.Bicycle)
-        # rider_bbox_list = self._world.get_level_bbs(carla.CityObjectLabel.Rider)
-        # vehicle_bbox_list = car_bbox_list + bus_bbox_list + truck_bbox_list + motorcycle_bbox_list + bicycle_bbox_list + rider_bbox_list
-        # walker_bbox_list = self._world.get_level_bbs(carla.CityObjectLabel.Pedestrians)
-        # if self._scale_bbox:
-        #     vehicles = self._get_surrounding_actors(vehicle_bbox_list, is_within_distance, 1.0)
-        #     walkers = self._get_surrounding_actors(walker_bbox_list, is_within_distance, 2.0)
-        # else:
-        #     vehicles = self._get_surrounding_actors(vehicle_bbox_list, is_within_distance)
-        #     walkers = self._get_surrounding_actors(walker_bbox_list, is_within_distance)
-
-        vehicle_bbox_list = self._world.get_level_bbs(carla.CityObjectLabel.Vehicles)
+        # Adapt to CARLA version: >= 0.9.13 removed 'Vehicles', use individual types
+        if hasattr(carla.CityObjectLabel, 'Vehicles'):
+            vehicle_bbox_list = self._world.get_level_bbs(carla.CityObjectLabel.Vehicles)
+        else:
+            vehicle_bbox_list = (
+                self._world.get_level_bbs(carla.CityObjectLabel.Car)
+                + self._world.get_level_bbs(carla.CityObjectLabel.Bus)
+                + self._world.get_level_bbs(carla.CityObjectLabel.Truck)
+                + self._world.get_level_bbs(carla.CityObjectLabel.Motorcycle)
+                + self._world.get_level_bbs(carla.CityObjectLabel.Bicycle)
+                + self._world.get_level_bbs(carla.CityObjectLabel.Rider)
+            )
         walker_bbox_list = self._world.get_level_bbs(carla.CityObjectLabel.Pedestrians)
         if self._scale_bbox:
             vehicles = self._get_surrounding_actors(vehicle_bbox_list, is_within_distance, 1.0)

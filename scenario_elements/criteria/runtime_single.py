@@ -7,8 +7,13 @@ from typing import List
 
 from .atomic.base import Criterion
 from .runtime_collision import CollisionTest
-from .runtime_stuck import ActorBlockedTest
 from .runtime_destination import RouteCompletionTest
+from .runtime_offroad import OffRoadTest
+from .runtime_overspeed import OverSpeedTest
+from .runtime_stop_sign import RunningStopTest
+from .runtime_stuck import ActorBlockedTest
+from .runtime_traffic_light import RunningRedLightTest
+from .runtime_wrong_lane import WrongLaneTest
 
 from scenario_runner.ctn_operator import CtnSimOperator
 
@@ -52,7 +57,7 @@ class RuntimeSingleTest(Criterion):
         terminate_on_failure: bool = True,
         name: str = "RuntimeSingleTest",
     ):
-        super(RuntimeSingleTest, self).__init__(name, actor, False)
+        super().__init__(name, actor, False)
         self.id = id
         self.actor = actor
         self.actor_id = actor.id
@@ -79,8 +84,30 @@ class RuntimeSingleTest(Criterion):
             "reach_destination": {
                 "occurred": False,
                 "details": {}
+            },
+            "offroad": {
+                "occurred": False,
+                "details": {}
+            },
+            "overspeed": {
+                "occurred": False,
+                "details": {}
+            },
+            "running_stop": {
+                "occurred": False,
+                "details": {}
+            },
+            "running_red_light": {
+                "occurred": False,
+                "details": {}
+            },
+            "wrong_lane": {
+                "occurred": False,
+                "details": {}
             }
         }
+        
+        
         self.events = []
         self.actor_destination = [
             self.actor_route[-1][0].location.x, 
@@ -115,13 +142,50 @@ class RuntimeSingleTest(Criterion):
             terminate_on_failure=self.terminate_on_failure,
             ctn_operator=self.ctn_operator
         )
+        # not need to termination oracle
+        self.offroad_test = OffRoadTest(
+            name=f"{self.id}_offroad",
+            actor=self.actor,
+            ctn_operator=self.ctn_operator,
+            duration=1.0,
+            terminate_on_failure=False
+        )
+        self.overspeed_test = OverSpeedTest(
+            name=f"{self.id}_overspeed",
+            actor=self.actor,
+            ctn_operator=self.ctn_operator,
+            terminate_on_failure=False
+        )
+        self.stop_sign_test = RunningStopTest(
+            name=f"{self.id}_stop_sign",
+            actor=self.actor,
+            ctn_operator=self.ctn_operator,
+            terminate_on_failure=False
+        )
+        self.red_light_test = RunningRedLightTest(
+            name=f"{self.id}_red_light",
+            actor=self.actor,
+            ctn_operator=self.ctn_operator,
+            terminate_on_failure=False
+        )
+        self.wrong_lane_test = WrongLaneTest(
+            name=f"{self.id}_wrong_lane",
+            actor=self.actor,
+            ctn_operator=self.ctn_operator,
+            terminate_on_failure=False
+        )
 
     def initialise(self):
-        super(RuntimeSingleTest, self).initialise()
+        super().initialise()
         if not self.already_terminate:
             self.collision_test.initialise()
             self.stuck_test.initialise()
             self.reach_destination_test.initialise()
+            self.offroad_test.initialise()
+            self.overspeed_test.initialise()
+            self.stop_sign_test.initialise()
+            self.red_light_test.initialise()
+            self.wrong_lane_test.initialise()
             
     def get_stop(self) -> bool:
         return self.st_detail["collision"]["occurred"] or self.st_detail["stuck"]["occurred"] or self.st_detail["reach_destination"]["occurred"]
@@ -146,17 +210,26 @@ class RuntimeSingleTest(Criterion):
             collision_status = self.collision_test.update()
             stuck_status = self.stuck_test.update()
             reach_status = self.reach_destination_test.update()
+            offroad_status = self.offroad_test.update()
+            overspeed_status = self.overspeed_test.update()
+            stop_sign_status = self.stop_sign_test.update()
+            red_light_status = self.red_light_test.update()
+            wrong_lane_status = self.wrong_lane_test.update()
         except Exception as e:
             logger.error(f"RuntimeSingleTest {self.name} update error: {e}")
+            traceback.print_exc()
             self.test_status = "FAILURE"
             self.actual_value = 0
             new_status = py_trees.common.Status.FAILURE
-            traceback.print_exc()
-            # return new_status
         
         self.st_detail["collision"] = self.collision_test.st_detail
         self.st_detail["stuck"] = self.stuck_test.st_detail
         self.st_detail["reach_destination"] = self.reach_destination_test.st_detail
+        self.st_detail["offroad"] = self.offroad_test.st_detail
+        self.st_detail["overspeed"] = self.overspeed_test.st_detail
+        self.st_detail["running_stop"] = self.stop_sign_test.st_detail
+        self.st_detail["running_red_light"] = self.red_light_test.st_detail
+        self.st_detail["wrong_lane"] = self.wrong_lane_test.st_detail
         
         if reach_status == py_trees.common.Status.SUCCESS or reach_status == py_trees.common.Status.FAILURE:
             if "reach_destination" not in self.events:
@@ -203,23 +276,19 @@ class RuntimeSingleTest(Criterion):
         return new_status
 
     def terminate(self, new_status):
-        """
-        Cleanup sensor
-        """
-        if self.collision_test is not None:
-            self.collision_test.terminate(new_status)
-            self.collision_test = None
-        
-        if self.stuck_test is not None:
-            self.stuck_test.terminate(new_status)
-            self.stuck_test = None
-            
-        if self.reach_destination_test is not None:
-            self.reach_destination_test.terminate(new_status)
-            self.reach_destination_test = None
-        
+        """Cleanup all sub-criteria."""
+        sub_tests = [
+            "collision_test", "stuck_test", "reach_destination_test",
+            "offroad_test", "overspeed_test", "stop_sign_test",
+            "red_light_test", "wrong_lane_test",
+        ]
+        for attr_name in sub_tests:
+            test = getattr(self, attr_name, None)
+            if test is not None:
+                test.terminate(new_status)
+                setattr(self, attr_name, None)
+
         self.already_terminate = True
-        
+
         self.logger.debug("%s.terminate()[%s->%s]" % (self.__class__.__name__, self.status, new_status))
-        super(RuntimeSingleTest, self).terminate(new_status)
-        
+        super().terminate(new_status)

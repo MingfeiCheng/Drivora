@@ -86,15 +86,13 @@ class VadAgent(AutonomousAgent):
         self.prev_control = control
         self.prev_control_cache = []
         
-        SAVE_PATH = os.path.join(self.scenario_dir, "agent/internal")
-        
-        if SAVE_PATH is not None:
+        if self.internal_save_dir:
             now = datetime.datetime.now()
             # string = pathlib.Path(os.environ['ROUTES']).stem + '_'
             string = ''
             string += self.save_name
             # self.save_path = pathlib.Path(os.environ['SAVE_PATH']) / string
-            self.save_path = pathlib.Path(str(SAVE_PATH)) / string
+            self.save_path = pathlib.Path(self.internal_save_dir) / string
             self.save_path.mkdir(parents=True, exist_ok=False)
             (self.save_path / 'rgb_front').mkdir()
             (self.save_path / 'rgb_front_right').mkdir()
@@ -418,7 +416,7 @@ class VadAgent(AutonomousAgent):
 
         metric_info = self.get_metric_info()
         self.metric_info[self.step] = metric_info
-        if SAVE_PATH is not None and self.step % 1 == 0:
+        if self.save_path is not None and self.step % 1 == 0:
             self.save(tick_data)
         self.prev_control = control
         

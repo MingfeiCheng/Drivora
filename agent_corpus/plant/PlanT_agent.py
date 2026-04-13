@@ -1,7 +1,13 @@
 import os
+import sys
 import json
 import math
 from pathlib import Path
+
+# Ensure plant directory is on path for carla_agent_files imports
+_PLANT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _PLANT_DIR not in sys.path:
+    sys.path.insert(0, _PLANT_DIR)
 from PIL import Image
 from omegaconf import OmegaConf
 from collections import deque
@@ -35,7 +41,8 @@ class PlanTPerceptionAgent(AutonomousAgent):
         
         
         self.cfg = OmegaConf.load(path_to_conf_file)
-        self.cfg.viz = 0
+        # Enable viz if save_internal is set
+        self.cfg.viz = 1 if getattr(self, 'save_internal', False) else 0
         
         # hydra.core.global_hydra.GlobalHydra.instance().clear()
         # initialize(config_path="config", job_name="test_app")
@@ -66,6 +73,7 @@ class PlanTPerceptionAgent(AutonomousAgent):
         self.perception_agent = PerceptionAgent()
         self.perception_agent.setup(Path(f'{str(checkpoint_path)}/{self.cfg.perception_ckpt_load_path}'))
         self.perception_agent.cfg = self.cfg
+        self.perception_agent._bev_save_dir = getattr(self, 'internal_save_dir', None)
         
         print(f"cfg: {self.cfg}")
         
@@ -391,9 +399,8 @@ class PlanTPerceptionAgent(AutonomousAgent):
             control.throttle = float(0.0)
 
         viz_trigger = (self.step % 20 == 0 and self.cfg.viz)
-        # viz_trigger = True
-        if viz_trigger and self.step > 2:
-            create_BEV(label_raw, light, tp, pred_wp, label_raw_gt)
+        if viz_trigger and self.step > 2 and self.internal_save_dir:
+            create_BEV(label_raw, light, tp, pred_wp, label_raw_gt, save_dir=self.internal_save_dir)
             
         return control
     
@@ -561,7 +568,7 @@ class PlanTPerceptionAgent(AutonomousAgent):
         del self.net
         self.perception_agent.destroy()
 
-def create_BEV(labels_org, gt_traffic_light_hazard, target_point, pred_wp, label_raw_gt, pix_per_m=5):
+def create_BEV(labels_org, gt_traffic_light_hazard, target_point, pred_wp, label_raw_gt, pix_per_m=5, save_dir=None):
 
     pred_wp = np.array(pred_wp.squeeze())
     s=0
@@ -691,8 +698,12 @@ def create_BEV(labels_org, gt_traffic_light_hazard, target_point, pred_wp, label
     # all_images = np.concatenate((rgb_image, all_images), axis=0)
     all_images = img_final
     
-    Path(f'bev_viz1').mkdir(parents=True, exist_ok=True)
-    all_images.save(f'bev_viz1/{time.time()}_{s}.png')
+    if save_dir:
+        bev_dir = os.path.join(save_dir, 'bev_viz')
+    else:
+        bev_dir = 'bev_viz1'
+    Path(bev_dir).mkdir(parents=True, exist_ok=True)
+    all_images.save(os.path.join(bev_dir, f'{time.time()}_{s}.png'))
 
     # return BEV
 

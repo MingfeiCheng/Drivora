@@ -10,6 +10,7 @@ It can also make use of the global route planner to follow a specifed route
 """
 
 import carla
+import numpy as np
 
 from typing import List
 from enum import Enum
@@ -20,6 +21,36 @@ from .navigation.local_planner import LocalPlanner
 from .navigation.global_route_planner import GlobalRoutePlanner
 
 from scenario_elements.config import Waypoint
+
+def _numpy(carla_vector, normalize=False):
+    result = np.float32([carla_vector.x, carla_vector.y])
+    if normalize:
+        return result / (np.linalg.norm(result) + 1e-4)
+    return result
+
+def get_xyz(_):
+    return np.array([_.x, _.y, _.z])
+
+def _orientation(yaw):
+    return np.float32([np.cos(np.radians(yaw)), np.sin(np.radians(yaw))])
+
+def get_collision(p1, v1, p2, v2):
+    A = np.stack([v1, -v2], 1)
+    b = p2 - p1
+    if abs(np.linalg.det(A)) < 1e-3:
+        return False, None
+    x = np.linalg.solve(A, b)
+    collides = all(x >= 0) and all(x <= 1) # how many seconds until collision
+
+    return collides, p1 + x[0] * v1
+
+STATIC_LIST = [
+    "static.prop.streetbarrier",
+    "static.prop.constructioncone",
+    "static.prop.trafficcone01",
+    "static.prop.trafficcone02",
+    "static.prop.trafficwarning"
+]
 
 class BasicAgent(object):
     """
@@ -50,7 +81,7 @@ class BasicAgent(object):
         self._target_speed = target_speed
         self._sampling_resolution = 2.0
         self._base_tlight_threshold = 5.0  # meters
-        self._base_vehicle_threshold = 5.0  # meters
+        self._base_vehicle_threshold = 10.0  # meters
         self._max_brake = 0.5
 
         # Change parameters according to the dictionary
@@ -182,7 +213,7 @@ class BasicAgent(object):
         end_location = end_waypoint.transform.location
         return self._global_planner.trace_route(start_location, end_location)
 
-    def run_step(self):
+    def run_step(self, debug=False):
         """Execute one step of navigation."""
         hazard_detected = False
 
@@ -190,7 +221,7 @@ class BasicAgent(object):
         actor_list = self._world.get_actors()
         vehicle_list = actor_list.filter("*vehicle*")
         lights_list = actor_list.filter("*traffic_light*")
-
+        
         vehicle_speed = get_speed(self._vehicle) / 3.6
 
         # Check for possible vehicle obstacles
@@ -198,6 +229,14 @@ class BasicAgent(object):
         affected_by_vehicle, _ = self._vehicle_obstacle_detected(vehicle_list, max_vehicle_distance)
         if affected_by_vehicle:
             hazard_detected = True
+            
+        # NOTE: we add static here
+        for static_name in STATIC_LIST:
+            static_list = actor_list.filter(f"*{static_name}*")
+            affected_by_static, _ = self._vehicle_obstacle_detected(static_list, max_vehicle_distance)
+            if affected_by_static:
+                hazard_detected = True
+                break
 
         # Check if the vehicle is affected by a red traffic light
         max_tlight_distance = self._base_tlight_threshold + vehicle_speed
@@ -205,6 +244,10 @@ class BasicAgent(object):
         if affected_by_tlight:
             hazard_detected = True
 
+        third_part_collision_detector = self.collision_detect()
+        if third_part_collision_detector:
+            hazard_detected = True
+            
         control = self._local_planner.run_step()
         if hazard_detected:
             control = self.add_emergency_stop(control)
@@ -328,3 +371,100 @@ class BasicAgent(object):
             if is_within_distance(target_rear_transform, ego_front_transform, max_distance, [0, 90]):
                 return (True, target_vehicle)
         return (False, None)
+    
+    def _static_obstacle_detected(self, static_list=None, max_distance=None):
+        """
+        Method to check if there is a vehicle in front of the agent blocking its path.
+
+            :param vehicle_list (list of carla.Vehicle): list contatining vehicle objects.
+                If None, all vehicle in the scene are used
+            :param max_distance: max freespace to check for obstacles.
+                If None, the base threshold value is used
+        """
+        if self._ignore_vehicles:
+            return (False, None)
+        
+        if not static_list:
+            return (False, None)
+
+        if not max_distance:
+            max_distance = self._base_vehicle_threshold
+
+        ego_wpt = self._map.get_waypoint(self._vehicle.get_location())
+
+        for target_static in static_list:
+            target_transform = target_static.get_transform()
+            target_wpt = self._map.get_waypoint(target_transform.location)
+            if target_wpt.road_id != ego_wpt.road_id or target_wpt.lane_id != ego_wpt.lane_id:
+                next_wpt = self._local_planner.get_incoming_waypoint_and_direction(steps=3)[0]
+                if not next_wpt:
+                    continue
+                if target_wpt.road_id != next_wpt.road_id or target_wpt.lane_id != next_wpt.lane_id:
+                    continue
+            
+            dist = np.linalg.norm(_numpy(target_transform.location) - _numpy(self._vehicle.get_location()))
+            if dist < max_distance:
+                return (True, target_static)
+            
+        return (False, None)
+    
+    def collision_detect(self):
+        actors = self._world.get_actors()
+        vehicle = self._is_vehicle_hazard(actors.filter('*vehicle*'))
+        walker = self._is_walker_hazard(actors.filter('*walker*'))
+        self.is_vehicle_present = 1 if vehicle is not None else 0
+        self.is_pedestrian_present = 1 if walker is not None else 0
+        return any(x is not None for x in [vehicle, walker])
+        # return any(x is not None for x in [vehicle]) # we ignore pedestrians for now, as we care about vehicle collisions mostly
+
+    def _is_walker_hazard(self, walkers_list):
+        z = self._vehicle.get_location().z
+        p1 = _numpy(self._vehicle.get_location())
+        v1 = 10.0 * _orientation(self._vehicle.get_transform().rotation.yaw)
+
+        for walker in walkers_list:
+            v2_hat = _orientation(walker.get_transform().rotation.yaw)
+            s2 = np.linalg.norm(_numpy(walker.get_velocity()))
+            if s2 < 0.05:
+                v2_hat *= s2
+            p2 = -3.0 * v2_hat + _numpy(walker.get_location())
+            v2 = 8.0 * v2_hat
+            collides, collision_point = get_collision(p1, v1, p2, v2)
+            if collides:
+                return walker
+        return None
+
+    def _is_vehicle_hazard(self, vehicle_list):
+        z = self._vehicle.get_location().z
+        o1 = _orientation(self._vehicle.get_transform().rotation.yaw)
+        p1 = _numpy(self._vehicle.get_location())
+        s1 = max(10.0, 3.0 * np.linalg.norm(_numpy(self._vehicle.get_velocity()))) # increases the threshold distance
+        v1_hat = o1
+        v1 = s1 * v1_hat
+        for target_vehicle in vehicle_list:
+            if target_vehicle.id == self._vehicle.id:
+                continue
+            o2 = _orientation(target_vehicle.get_transform().rotation.yaw)
+            p2 = _numpy(target_vehicle.get_location())
+            s2 = max(5.0, 2.0 * np.linalg.norm(_numpy(target_vehicle.get_velocity())))
+            v2_hat = o2
+            v2 = s2 * v2_hat
+            p2_p1 = p2 - p1
+            distance = np.linalg.norm(p2_p1)
+            p2_p1_hat = p2_p1 / (distance + 1e-4)
+
+            angle_to_car = np.degrees(np.arccos(v1_hat.dot(p2_p1_hat)))
+            angle_between_heading = np.degrees(np.arccos(o1.dot(o2)))
+
+            # to consider -ve angles too
+            angle_to_car = min(angle_to_car, 360.0 - angle_to_car)
+            angle_between_heading = min(angle_between_heading, 360.0 - angle_between_heading)
+
+            if angle_between_heading > 60.0 and not (angle_to_car < 20 and distance < s1):
+                continue
+            elif angle_to_car > 30.0:
+                continue
+            elif distance > s1:
+                continue
+            return target_vehicle
+        return None

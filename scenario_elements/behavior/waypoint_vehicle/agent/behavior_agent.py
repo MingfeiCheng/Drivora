@@ -10,14 +10,16 @@ traffic signs, and has different possible configurations. """
 
 import numpy as np
 import carla
+from loguru import logger
+
 from .navigation.local_planner import RoadOption
 from .navigation.behavior_types import Cautious, Aggressive, Normal
 from .navigation.misc import get_speed, positive, is_within_distance, compute_distance
-from .basic_agent import BasicAgent
+from .basic_agent import BasicAgent, STATIC_LIST
 
 def get_basic_config():
     return {
-        "base_vehicle_threshold": 5.0,
+        "base_vehicle_threshold": 10.0,
         "base_tlight_threshold": 5.0,
         "sampling_resolution": 2.0,
         "ignore_traffic_lights": False,
@@ -46,27 +48,12 @@ def get_basic_config():
 
 class BehaviorWaypointAgent(BasicAgent):
     """
-    BehaviorAgent implements an agent that navigates scenes to reach a given
-    target destination, by computing the shortest possible path to it.
-    This agent can correctly follow traffic signs, speed limitations,
-    traffic lights, while also taking into account nearby vehicles. Lane changing
-    decisions can be taken by analyzing the surrounding environment such as tailgating avoidance.
-    Adding to these are possible behaviors, the agent can also keep safety distance
-    from a car in front of it by tracking the instantaneous time to collision
-    and keeping it in a certain range. Finally, different sets of behaviors
-    are encoded in the agent, from cautious to a more aggressive ones.
+    BehaviorAgent navigates scenes following waypoints, respecting traffic lights,
+    avoiding vehicles and pedestrians, with configurable driving behavior profiles.
     """
 
     def __init__(self, vehicle, opt_dict, behavior='normal'):
-        """
-        Constructor method.
-
-            :param vehicle: actor to apply to local planner logic onto
-            :param ignore_traffic_light: boolean to ignore any traffic light
-            :param behavior: type of agent to apply
-        """
-
-        super(BehaviorWaypointAgent, self).__init__(vehicle, opt_dict=opt_dict)
+        super().__init__(vehicle, opt_dict=opt_dict)
         self._look_ahead_steps = 0
 
         # Vehicle information
@@ -79,21 +66,37 @@ class BehaviorWaypointAgent(BasicAgent):
         self._behavior = None
         self._sampling_resolution = 4.5
 
+        # Cached actor lists — refreshed each step to avoid per-query overhead
+        self._cached_lights = None
+        self._cached_vehicles = None
+        self._cached_walkers = None
+        self._cached_statics = None
+
         # Parameters for agent behavior
         if behavior == 'cautious':
             self._behavior = Cautious()
-
         elif behavior == 'normal':
             self._behavior = Normal()
-
         elif behavior == 'aggressive':
             self._behavior = Aggressive()
 
+    def _refresh_actor_cache(self):
+        """Fetch all actors once per tick and cache filtered lists."""
+        actor_list = self._world.get_actors()
+        self._cached_lights = actor_list.filter("*traffic_light*")
+        self._cached_vehicles = actor_list.filter("*vehicle*")
+        self._cached_walkers = actor_list.filter("*walker.pedestrian*")
+        # Cache static obstacles
+        self._cached_statics = []
+        for static_name in STATIC_LIST:
+            self._cached_statics.extend(actor_list.filter(f"*{static_name}*"))
+
     def _update_information(self):
         """
-        This method updates the information regarding the ego
-        vehicle based on the surrounding world.
+        Updates ego vehicle state and refreshes cached actor lists.
         """
+        self._refresh_actor_cache()
+
         self._speed = get_speed(self._vehicle)
         self._speed_limit = self._vehicle.get_speed_limit()
         self._local_planner.set_speed(self._speed_limit)
@@ -165,13 +168,8 @@ class BehaviorWaypointAgent(BasicAgent):
         return (False, None, -1)
 
     def traffic_light_manager(self):
-        """
-        This method is in charge of behaviors for red lights.
-        """
-        actor_list = self._world.get_actors()
-        lights_list = actor_list.filter("*traffic_light*")
-        affected, _ = self._affected_by_traffic_light(lights_list)
-
+        """Check if vehicle should stop for a red traffic light."""
+        affected, _ = self._affected_by_traffic_light(self._cached_lights)
         return affected
 
     def _tailgating(self, waypoint, vehicle_list):
@@ -197,7 +195,7 @@ class BehaviorWaypointAgent(BasicAgent):
                 new_vehicle_state, _, _ = self._vehicle_obstacle_detected(vehicle_list, max(
                     self._behavior.min_proximity_threshold, self._speed_limit / 2), up_angle_th=180, lane_offset=1)
                 if not new_vehicle_state:
-                    print("Tailgating, moving to the right!")
+                    logger.debug("Tailgating, moving to the right!")
                     end_waypoint = self._local_planner.target_waypoint
                     self._behavior.tailgate_counter = 200
                     self.set_destination(end_waypoint.transform.location,
@@ -206,7 +204,7 @@ class BehaviorWaypointAgent(BasicAgent):
                 new_vehicle_state, _, _ = self._vehicle_obstacle_detected(vehicle_list, max(
                     self._behavior.min_proximity_threshold, self._speed_limit / 2), up_angle_th=180, lane_offset=-1)
                 if not new_vehicle_state:
-                    print("Tailgating, moving to the left!")
+                    logger.debug("Tailgating, moving to the left!")
                     end_waypoint = self._local_planner.target_waypoint
                     self._behavior.tailgate_counter = 200
                     self.set_destination(end_waypoint.transform.location,
@@ -214,19 +212,16 @@ class BehaviorWaypointAgent(BasicAgent):
 
     def collision_and_car_avoid_manager(self, waypoint):
         """
-        This module is in charge of warning in case of a collision
-        and managing possible tailgating chances.
-
-            :param location: current location of the agent
-            :param waypoint: current waypoint of the agent
-            :return vehicle_state: True if there is a vehicle nearby, False if not
-            :return vehicle: nearby vehicle
-            :return distance: distance to nearby vehicle
+        Check for collision risk with vehicles and static obstacles,
+        and manage tailgating behavior.
         """
+        wp_loc = waypoint.transform.location
 
-        vehicle_list = self._world.get_actors().filter("*vehicle*")
-        def dist(v): return v.get_location().distance(waypoint.transform.location)
-        vehicle_list = [v for v in vehicle_list if dist(v) < 45 and v.id != self._vehicle.id]
+        def dist(v):
+            return v.get_location().distance(wp_loc)
+
+        vehicle_list = [v for v in self._cached_vehicles if dist(v) < 45 and v.id != self._vehicle.id]
+        vehicle_list += [s for s in self._cached_statics if dist(s) < 45]
 
         if self._direction == RoadOption.CHANGELANELEFT:
             vehicle_state, vehicle, distance = self._vehicle_obstacle_detected(
@@ -250,20 +245,9 @@ class BehaviorWaypointAgent(BasicAgent):
         return vehicle_state, vehicle, distance
 
     def pedestrian_avoid_manager(self, waypoint):
-        """
-        This module is in charge of warning in case of a collision
-        with any pedestrian.
-
-            :param location: current location of the agent
-            :param waypoint: current waypoint of the agent
-            :return vehicle_state: True if there is a walker nearby, False if not
-            :return vehicle: nearby walker
-            :return distance: distance to nearby walker
-        """
-
-        walker_list = self._world.get_actors().filter("*walker.pedestrian*")
-        def dist(w): return w.get_location().distance(waypoint.transform.location)
-        walker_list = [w for w in walker_list if dist(w) < 10]
+        """Check for collision risk with pedestrians."""
+        wp_loc = waypoint.transform.location
+        walker_list = [w for w in self._cached_walkers if w.get_location().distance(wp_loc) < 10]
 
         if self._direction == RoadOption.CHANGELANELEFT:
             walker_state, walker, distance = self._vehicle_obstacle_detected(walker_list, max(
@@ -335,7 +319,7 @@ class BehaviorWaypointAgent(BasicAgent):
 
         ego_vehicle_loc = self._vehicle.get_location()
         ego_vehicle_wp = self._map.get_waypoint(ego_vehicle_loc)
-
+        
         # 1: Red lights and stops behavior
         if self.traffic_light_manager():
             return self.emergency_stop()
@@ -360,16 +344,19 @@ class BehaviorWaypointAgent(BasicAgent):
         if vehicle_state:
             # Distance is computed from the center of the two cars,
             # we use bounding boxes to calculate the actual distance
-            distance = distance - max(
-                vehicle.bounding_box.extent.y, vehicle.bounding_box.extent.x) - max(
-                    self._vehicle.bounding_box.extent.y, self._vehicle.bounding_box.extent.x)
-
+            if isinstance(vehicle, carla.Vehicle):
+                distance = distance - max(
+                    vehicle.bounding_box.extent.y, vehicle.bounding_box.extent.x) - max(
+                        self._vehicle.bounding_box.extent.y, self._vehicle.bounding_box.extent.x)
+            else:
+                distance = distance - 0.5
+                
             # Emergency brake if the car is very close.
             if distance < self._behavior.braking_distance:
                 return self.emergency_stop()
             else:
                 control = self.car_following_manager(vehicle, distance)
-
+                
         # 3: Intersection behavior
         elif self._incoming_waypoint.is_junction and (self._incoming_direction in [RoadOption.LEFT, RoadOption.RIGHT]):
             target_speed = min([
@@ -386,6 +373,11 @@ class BehaviorWaypointAgent(BasicAgent):
             self._local_planner.set_speed(target_speed)
         control = self._local_planner.run_step(debug=debug)
 
+        # 5. third-party collision detector
+        third_part_collision_detector = self.collision_detect()
+        if third_part_collision_detector:
+            return self.emergency_stop()
+        
         return control
 
     def emergency_stop(self):

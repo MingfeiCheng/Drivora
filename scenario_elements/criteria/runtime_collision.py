@@ -2,20 +2,12 @@ import carla
 import py_trees
 import numpy as np
 
-from .atomic.base import Criterion
+from .atomic.base import Criterion, to_numpy
 from .atomic.traffic_events import TrafficEvent, TrafficEventType
 
 from tools.timer import GameTime
 
 from scenario_runner.ctn_operator import CtnSimOperator
-
-def to_numpy(vec):
-    """
-    Convert a carla.Vector3D to a numpy array
-    if use Carla version < 0.9.14, uncomment the return line
-    """
-    return np.array([vec.x, vec.y, vec.z])
-    # return vec
     
 class CollisionTest(Criterion):
 
@@ -40,7 +32,7 @@ class CollisionTest(Criterion):
         """
         Construction with sensor setup
         """
-        super(CollisionTest, self).__init__(name, actor, optional, terminate_on_failure)
+        super().__init__(name, actor, optional, terminate_on_failure)
         self.logger.debug("%s.__init__()" % (self.__class__.__name__))
         self._other_actor = other_actor
         self._other_actor_type = other_actor_type
@@ -66,7 +58,7 @@ class CollisionTest(Criterion):
         blueprint = world.get_blueprint_library().find('sensor.other.collision')
         self._collision_sensor = world.spawn_actor(blueprint, carla.Transform(), attach_to=self.actor)
         self._collision_sensor.listen(lambda event: self._count_collisions(event))
-        super(CollisionTest, self).initialise()
+        super().initialise()
 
     def update(self):
         """
@@ -102,7 +94,7 @@ class CollisionTest(Criterion):
             self._collision_sensor.stop()
             self._collision_sensor.destroy()
         self._collision_sensor = None
-        super(CollisionTest, self).terminate(new_status)
+        super().terminate(new_status)
 
     def _count_collisions(self, event):     # pylint: disable=too-many-return-statements
         """Update collision count"""
@@ -167,6 +159,8 @@ class CollisionTest(Criterion):
         self.st_detail = {
             "occurred": True,
             "details": {
+                "id": self.actor.id,
+                "frame": GameTime.get_frame(),
                 "timestamp": GameTime.get_time(),
                 "location": {
                     "x": actor_location.x,

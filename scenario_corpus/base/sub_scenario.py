@@ -6,15 +6,13 @@
 # For a copy, see <https://opensource.org/licenses/MIT>.
 
 """
-This module provide BasicScenario, the basic class of all the scenarios.
+This module provides ScenarioTree, the base class for sub-scenario behavior trees.
 """
 
-from __future__ import print_function
-
-import py_trees
 import operator
 
-from loguru import logger
+import py_trees
+
 from typing import Optional
 
 from scenario_runner.ctn_operator import CtnSimOperator
@@ -24,19 +22,14 @@ from scenario_elements.criteria.atomic import TimeOut, Criterion
 
 class ScenarioTree:
     """
-    NOTE: we do not need time out here, is controlled by global scenario manager
-    
-    A class to represent a sub-behavior tree for parallel execution.
-    This is a placeholder for future implementation.
-    
-    This class only controls the behaviors of sub-scenarios.
-    
-    Normally, we parallelly provide two trees:
-    behavior_tree: trigger_node -> running_node -> end_node
-    criteria: runtime monitor_node parallelly runs
-    
-    Tutorial:
-    in the create methods, you can create your own actors, agents, and behaviors
+    Base class for sub-scenario behavior trees.
+
+    Controls the behaviors of sub-scenarios by composing two parallel trees:
+    - behavior_tree: trigger_node -> running_node -> end_node
+    - criteria: runtime monitor nodes running in parallel
+
+    Subclasses should override the _create_* methods to define actors, behaviors,
+    and test criteria.
     """
     def __init__(
         self, 
@@ -64,11 +57,10 @@ class ScenarioTree:
             py_trees.logging.level = py_trees.logging.Level.DEBUG
 
         # internal parameters
-        self.other_actors = {} # record the other actors in this sub-scenario
-         
-        # move initialize method to caller
-        # calling by demands
-        self.scenario_tree = None  # the root of the scenario tree
+        self.other_actors = {}
+        self.scenario_tree = None
+        self.criteria_tree = None
+        self.timeout_node = None
         
     def initialize(self):
         # create the scenario step by step
@@ -110,15 +102,13 @@ class ScenarioTree:
         # add the behavior tree to the scenario tree
         self.scenario_tree.add_child(self.behavior_tree)
             
-        # Create the criteria tree (if needed)
+        # Create the criteria tree
         if self.criteria_enable:
             criteria = self._create_test_criteria()
 
-            # All the work is done, thanks!
             if isinstance(criteria, py_trees.composites.Composite):
                 self.criteria_tree = criteria
 
-            # Lazy mode, but its okay, we'll create the parallel behavior tree for you.
             elif isinstance(criteria, list):
                 if len(criteria) > 0:
                     for criterion in criteria:
@@ -142,106 +132,69 @@ class ScenarioTree:
             self.timeout_node = self._create_timeout_behavior()
             if self.timeout_node:
                 self.scenario_tree.add_child(self.timeout_node)
-                
-        else:
-            self.timeout_node = None
 
         # Add other nodes
         self.scenario_tree.add_child(UpdateAllActorControls())
         self.scenario_tree.setup(timeout=1)
         
-    # ======= Running configs =======
     def tick(self):
-        """
-        Tick the scenario tree
-        """
-        if self.scenario_tree is not None:
-            return self.scenario_tree.tick_once()
-        else:
-            raise RuntimeError("Scenario tree is not initialized, please call initialize() first.")
+        if self.scenario_tree is None:
+            raise RuntimeError("Scenario tree is not initialized, call initialize() first.")
+        return self.scenario_tree.tick_once()
         
-    # define the initilization method
     def _initialize_actors(self):
-        """_summary_
-        This method aims to provide the initlization of the sub-scenario tree, including:
-        1. mainly create the actors
-        """
+        """Initialize actors for this sub-scenario. Override in subclass."""
         pass
-    
+
     def _initialize_environment(self):
-        """_summary_
-        This method aims to provide the initlization of the sub-scenario tree, including:
-        1. set the weather
-        2. set the traffic light
-        """
+        """Initialize environment (weather, traffic lights, etc.). Override in subclass."""
         pass
-        
-    # create behavior tree nodes
+
     def _setup_scenario_trigger(self):
-        # NOTE: you can replace this with your own trigger node logic
+        """Return a trigger node, or None to skip. Override in subclass."""
         return None
-    
+
     def _setup_scenario_end(self):
-        # NOTE: you can replace this with your own end node logic
+        """Return an end node, or None to skip. Override in subclass."""
         return None
-    
+
     def _create_behavior(self):
-        """_summary_
-        The note likes a sub-treee to define the behavior of the node
-        """
-        # NOTE: you must replace this with your own running node logic
-        raise NotImplementedError("This method should be implemented in subclass")
-    
-    # create runtime criteria nodes
+        """Return the behavior sub-tree. Must be implemented in subclass."""
+        raise NotImplementedError("_create_behavior() must be implemented in subclass")
+
     def _create_test_criteria(self) -> Optional[list]:
-        """
-        Create a runtime monitor for the sub-behavior tree.
-        This is a placeholder for future implementation.
-        """
-        return []    
-    
+        """Return a list of criteria nodes or a Composite. Override in subclass."""
+        return []
+
     def _create_timeout_behavior(self):
-        """
-        Default initialization of the timeout behavior.
-        Override this method in child class to provide custom initialization.
-        """
-        return TimeOut(self.timeout, name="TimeOut")  # Timeout node
+        """Return a timeout node. Override in subclass for custom timeout logic."""
+        return TimeOut(self.timeout, name="TimeOut")
 
-    def _extract_nodes_from_tree(self, tree):  # pylint: disable=no-self-use
-        """
-        Returns the list of all nodes from the given tree
-        """
-        node_list = [tree]
-        more_nodes_exist = True
-        while more_nodes_exist:
-            more_nodes_exist = False
-            for node in list(node_list):
-                if node.children:
-                    node_list.remove(node)
-                    more_nodes_exist = True
-                    for child in node.children:
-                        node_list.append(child)
+    @staticmethod
+    def _extract_nodes_from_tree(tree):
+        """Return all leaf nodes from the given behavior tree."""
+        leaves = []
+        queue = [tree]
+        while queue:
+            node = queue.pop(0)
+            if node.children:
+                queue.extend(node.children)
+            else:
+                leaves.append(node)
 
-        if len(node_list) == 1 and isinstance(node_list[0], py_trees.composites.Parallel):
+        if len(leaves) == 1 and isinstance(leaves[0], py_trees.composites.Parallel):
             return []
 
-        return node_list
+        return leaves
 
     def get_criteria(self):
-        """
-        Return the list of test criteria, including all the leaf nodes.
-        Some criteria might have trigger conditions, which have to be filtered out.
-        """
-        criteria = []
+        """Return all Criterion leaf nodes from the criteria tree."""
         if not self.criteria_tree:
-            return criteria
-
-        criteria_nodes = self._extract_nodes_from_tree(self.criteria_tree)
-        for criterion in criteria_nodes:
-            if isinstance(criterion, Criterion):
-                criteria.append(criterion)
-
-        return criteria
+            return []
+        return [
+            node for node in self._extract_nodes_from_tree(self.criteria_tree)
+            if isinstance(node, Criterion)
+        ]
     
     def terminate(self):
         
@@ -264,18 +217,8 @@ class ScenarioTree:
         py_trees.blackboard.Blackboard().set("ActorsWithController", {}, overwrite=True)
     
     def remove_all_actors(self):
-        """
-        Remove all actors
-        """
-        if not hasattr(self, 'other_actors'):
-            return
-        
-        for i, _ in self.other_actors.items():
-            if self.other_actors[i] is not None:
-                was_destroyed = self.ctn_operator.remove_actor(self.other_actors[i])
-                # if was_destroyed:
-                #     logger.debug(f"Actor {self.other_actors[i].id} destroyed successfully.")
-                # else:
-                #     logger.warning(f"Actor {self.other_actors[i].id} could not be destroyed.")
-                self.other_actors[i] = None
+        """Remove all actors spawned by this sub-scenario."""
+        for key, actor in self.other_actors.items():
+            if actor is not None:
+                self.ctn_operator.remove_actor(actor)
         self.other_actors = {}

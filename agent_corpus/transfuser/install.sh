@@ -1,50 +1,51 @@
 #!/bin/bash
+# Transfuser — uv + Python 3.8 + CARLA >= 0.9.12
+set -e
 
-# conda create -n tfuse python=3.7 -y 
-# export CUDA_HOME=/usr/local/cuda-11.8 # may setup cuda path before install
-export CUDA_HOME=/usr/local/cuda-11 # can replace yours
-
-pip install torch==1.13.1+cu117 torchvision==0.14.1+cu117 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu117
-pip install torch-scatter -f https://data.pyg.org/whl/torch-1.13.1+cu117.html
-pip install mmcv-full==1.5.3 -f https://download.openmmlab.com/mmcv/dist/cu117/torch1.13/index.html
-pip install mmcv==1.5.3 -f https://download.openmmlab.com/mmcv/dist/cu117/torch1.13/index.html
-
-pip install loguru
-pip install hydra-core
-pip install omegaconf
-pip install natsort
-pip install scipy
-pip install tqdm
-pip install watchdog
-pip install docker
-pip install py-trees==0.8.3
-pip install networkx
-pip install tabulate
-pip install shapely
-pip install timm==0.5.4
-pip install mmdet==2.25.0
-pip install mmsegmentation==0.25.0
-pip install mmengine
-pip install ujson
-pip install scikit-image==0.16.2
-pip install matplotlib==3.1.3
-pip install numpy==1.19.5
-
-# === Setup checkpoint directory relative to script ===
-set -e  # Exit on error
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CKPT_DIR="${SCRIPT_DIR}/model_ckpt"
-
-mkdir -p "$CKPT_DIR"
-echo "[INFO] Downloading models to $CKPT_DIR"
-
-wget -c -O "$CKPT_DIR/models_2022.zip" https://s3.eu-central-1.amazonaws.com/avg-projects/transfuser/models_2022.zip
-
-if ! unzip -tq "$CKPT_DIR/models_2022.zip"; then
-    echo "[ERROR] Downloaded file is not a valid zip archive."
-    exit 1
+# Auto-detect CUDA
+if [ -d "/usr/local/cuda" ]; then
+    export CUDA_HOME=/usr/local/cuda
+elif [ -d "/usr/local/cuda-12" ]; then
+    export CUDA_HOME=/usr/local/cuda-12
+elif [ -d "/usr/local/cuda-11" ]; then
+    export CUDA_HOME=/usr/local/cuda-11
 fi
 
-unzip -o "$CKPT_DIR/models_2022.zip" -d "$CKPT_DIR/"
-rm "$CKPT_DIR/models_2022.zip"
+uv pip install torch==2.0.1+cu118 torchvision==0.15.2+cu118 torchaudio==2.0.2 --extra-index-url https://download.pytorch.org/whl/cu118
+uv pip install torch-scatter -f https://data.pyg.org/whl/torch-2.0.1+cu118.html
+uv pip install mmcv-full==1.7.2 -f https://download.openmmlab.com/mmcv/dist/cu118/torch2.0/index.html
+
+uv pip install loguru
+uv pip install hydra-core
+uv pip install omegaconf
+uv pip install natsort
+uv pip install scipy
+uv pip install tqdm
+uv pip install watchdog
+uv pip install docker
+uv pip install py-trees==0.8.3
+uv pip install networkx
+uv pip install tabulate
+uv pip install shapely
+uv pip install timm==0.5.4
+uv pip install mmdet==2.28.2
+uv pip install mmsegmentation==0.30.0
+uv pip install mmengine
+uv pip install ujson
+uv pip install scikit-image
+uv pip install matplotlib
+uv pip install "numpy<1.24"
+
+# Download checkpoints
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CKPT_DIR="${SCRIPT_DIR}/model_ckpt"
+mkdir -p "$CKPT_DIR"
+
+if [ "${SKIP_DOWNLOAD:-0}" != "1" ] && [ ! -d "$CKPT_DIR/models_2022" ]; then
+    echo "[INFO] Downloading models to $CKPT_DIR"
+    wget -c -O "$CKPT_DIR/models_2022.zip" https://s3.eu-central-1.amazonaws.com/avg-projects/transfuser/models_2022.zip
+    unzip -o "$CKPT_DIR/models_2022.zip" -d "$CKPT_DIR/"
+    rm -f "$CKPT_DIR/models_2022.zip"
+else
+    echo "[INFO] Skipping checkpoint download."
+fi

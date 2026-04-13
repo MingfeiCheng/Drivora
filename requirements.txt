@@ -22,3 +22,8 @@ packaging
 matplotlib
 pydantic
 deap
+# BehAVExplor + SAMOTA deps (needed by tester venv for registry import)
+scikit-learn
+joblib
+hdbscan
+scipy

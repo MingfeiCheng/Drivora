@@ -8,21 +8,11 @@ from numpy import random
 from loguru import logger
 from typing import Optional
 
-try:
-    from packaging.version import Version
-except ImportError:
-    from distutils.version import LooseVersion as Version # Python 2 fallback
-    
-try:
-    # requires Python 3.8+
-    from importlib.metadata import metadata
-    def get_carla_version():
-        return Version(metadata("carla")["Version"])
-except ModuleNotFoundError:
-    # backport checking for older Python versions; module is deprecated
-    import pkg_resources
-    def get_carla_version():
-        return Version(pkg_resources.get_distribution("carla").version)
+from packaging.version import Version
+from importlib.metadata import metadata
+
+def get_carla_version():
+    return Version(metadata("carla")["Version"])
 
 OLD_CARLA_VERSION = Version("0.9.12")
 
@@ -82,7 +72,7 @@ class CtnSimOperator:
         """
         try:
             return docker.from_env().containers.get(self.container_name).status == 'running'
-        except:
+        except Exception:
             return False
 
     @property
@@ -99,7 +89,7 @@ class CtnSimOperator:
         try:
             self.client.get_world()
             return True
-        except:
+        except Exception:
             return False
 
     def _start_operation(self, wait_time=5.0, max_wait=60.0):
@@ -142,36 +132,39 @@ class CtnSimOperator:
 
         time.sleep(wait_time)
         
-    def start(self):
-        max_retries = 20
-        wait_time = 5.0
+    def start(self, max_retries=10, reconnect_attempts=3):
+        """Start container and connect.
+        For each retry: try reconnect_attempts times, then restart container."""
+        wait_time = 10.0
 
         if not self.is_running:
             self._start_operation(wait_time)
 
         if self.is_connected:
-            # will load world to destroy all actors
-            self.world = self.client.load_world("Town01")  # TODO: configurable map
             return
 
-        for attempt in range(1, max_retries + 1):
-            try:
-                logger.info(f"Trying to connect to Carla at {self.host}:{self.port} (attempt {attempt}/{max_retries})")
+        for retry in range(1, max_retries + 1):
+            # Try connecting a few times without restarting
+            for attempt in range(1, reconnect_attempts + 1):
+                try:
+                    logger.info(f"Connecting to Carla at {self.host}:{self.port} "
+                                f"(retry {retry}/{max_retries}, attempt {attempt}/{reconnect_attempts})")
+                    self.client = carla.Client(self.host, int(self.port))
+                    self.client.set_timeout(60.0)
+                    self.world = self.client.get_world()
+                    logger.info(f"Successfully connected to Carla at {self.host}:{self.port}")
+                    return
+                except Exception:
+                    logger.warning(f"Connection attempt failed.")
+                    time.sleep(2.0)
 
-                self.client = carla.Client(self.host, int(self.port))
-                self.client.set_timeout(20.0 + wait_time)
-                self.world = self.client.load_world("Town01")  # TODO: configurable map
+            # All reconnect attempts failed — restart container
+            logger.warning(f"Reconnect failed {reconnect_attempts} times. Restarting container...")
+            self.stop()
+            self._start_operation(wait_time)
+            wait_time = min(wait_time * 1.5, 30.0)
 
-                logger.info(f"Successfully connected to Carla at {self.host}:{self.port}")
-                return  # success
-            except Exception:
-                logger.exception(f"Failed to connect to Carla (attempt {attempt}/{max_retries})")
-                self.stop()
-                self._start_operation(wait_time)
-                wait_time *= 1.2  # exponential backoff
-
-        # if loop finishes without return
-        logger.error("Exceeded maximum retries (%d). Could not connect to Carla.", max_retries)
+        logger.error(f"Exceeded {max_retries} retries. Could not connect to Carla.")
         raise SystemExit(-1)
 
     def stop(self):
@@ -207,19 +200,11 @@ class CtnSimOperator:
                 else:
                     raise e
                 
-        self._map = None
-        self._world = None
-        self._sync_flag = False
-        self._ego_vehicle_route = None
-        self._all_actors = None
+        self.client = None
+        self.world = None
+        self.map = None
         self._carla_actor_pool = {}
-        self._client = None
-        self._spawn_points = None
-        self._spawn_index = 0
         self._rng = random.RandomState(self.random_seed)
-        self._grp = None
-        self._runtime_init_flag = False
-        self._latest_scenario = ""
         
     def get_world(self) -> Optional[carla.World]:
         if self.world is None:
@@ -283,20 +268,16 @@ class CtnSimOperator:
         # De/activate the autopilot of the actor if it belongs to vehicle
         if autopilot:
             if isinstance(actor, carla.Vehicle):
-                actor.set_autopilot(autopilot, self.carla_tm_port)
+                actor.set_autopilot(autopilot, self.tm_port)
             else:
                 logger.warning("WARNING: Tried to set the autopilot of a non vehicle actor")
 
         # Wait for the actor to be spawned properly before we do anything
-        if not tick:
-            pass
-        elif self.is_sync_mode:
-            self.world.tick()
-        else:
-            self.world.wait_for_tick()
-
-        if actor is None:
-            return None
+        if tick:
+            if self.is_sync_mode:
+                self.world.tick()
+            else:
+                self.world.wait_for_tick()
 
         self._carla_actor_pool[actor.id] = actor
         return actor
@@ -414,10 +395,7 @@ class CtnSimOperator:
         """
         actor_id = actor.id
         
-        if actor_id in self._carla_actor_pool:
-            was_destroyed = self._carla_actor_pool[actor_id].destroy()
-            self._carla_actor_pool[actor_id] = None  # type: ignore
-            self._carla_actor_pool.pop(actor_id)
-            return was_destroyed
-        # logger.info("Trying to remove a non-existing actor id {}".format(actor_id))
+        actor = self._carla_actor_pool.pop(actor_id, None)
+        if actor is not None:
+            return actor.destroy()
         return None

@@ -18,7 +18,7 @@ class BasicScenario(ScenarioTree):
         debug_mode: bool = False,
         timeout: Optional[float] = None
     ):
-        super(BasicScenario, self).__init__(
+        super().__init__(
             name=name,
             ctn_operator=ctn_operator,
             terminate_on_failure=terminate_on_failure,
@@ -38,7 +38,7 @@ class BasicScenario(ScenarioTree):
         self._setup_ego_vehicles()
         self._setup_scenarios()
         
-        super(BasicScenario, self).initialize()
+        super().initialize()
     
     def _setup_ego_vehicles(self):
         raise NotImplementedError("_setup_ego_vehicles() must be implemented in the subclass.")

@@ -349,10 +349,10 @@ def evaluate_with_ensembles(ensembles: List[EnsembleSurrogate], candidates: list
 # ═══════════════════════════════════════════════════════════════════════════
 
 def global_search(database: list, objective_uncovered: list, pop_size: int,
-                  n_generations: int, lb: list, ub: list, n_objectives: int) -> list:
+                  n_generations: int, lb: list, ub: list, n_objectives: int):
     """Run surrogate-guided evolutionary search.
 
-    Returns: list of best candidates (T_b best per objective + T_n most uncertain).
+    Returns: (candidates, ensembles) — best candidates + trained ensemble models.
     """
     # Train ensemble for each uncovered objective
     logger.info(f"[GS] Training ensembles for {len(objective_uncovered)} uncovered objectives "
@@ -373,7 +373,7 @@ def global_search(database: list, objective_uncovered: list, pop_size: int,
 
     if not ensembles:
         logger.warning("[GS] No ensembles trained, skipping global search.")
-        return []
+        return [], []
 
     # Initialize population
     P = generate_random_candidates(pop_size, lb, ub)
@@ -415,7 +415,7 @@ def global_search(database: list, objective_uncovered: list, pop_size: int,
         if c is not None:
             results.append(c)
     logger.info(f"[GS] Complete — returning {len(results)} candidates")
-    return results
+    return results, ensembles
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -89,6 +89,7 @@ class SAMOTAFuzzer(Fuzzer):
         self.archive = []              # SamotaCandidate archive
         self.objective_uncovered = list(range(N_OBJECTIVES))
         self.best_per_objective = [float('inf')] * N_OBJECTIVES
+        self.ensembles = []            # trained surrogate ensembles (cached)
 
         self.logbook = tools.Logbook()
         self.logbook.header = ["gen", "db_size", "archive_size", "uncovered", "best_score"]
@@ -235,12 +236,34 @@ class SAMOTAFuzzer(Fuzzer):
 
     def _get_checkpoint_data(self) -> dict:
         data = super()._get_checkpoint_data()
+        # Serialize archive candidates
+        archive_data = []
+        for c in self.archive:
+            archive_data.append({
+                'features': c.get_features(),
+                'objective_values': c.get_objective_values(),
+                'objectives_covered': c.objectives_covered,
+            })
+        # Save ensembles to disk
+        ensemble_paths = []
+        ensemble_dir = os.path.join(os.path.dirname(self.checkpoint_path), 'ensembles')
+        os.makedirs(ensemble_dir, exist_ok=True)
+        for ens in self.ensembles:
+            path = os.path.join(ensemble_dir, f'ensemble_obj_{ens.objective_index}.pkl')
+            try:
+                ens.save(path)
+                ensemble_paths.append({'path': path, 'obj': ens.objective_index})
+            except Exception as e:
+                logger.warning(f"Failed to save ensemble obj={ens.objective_index}: {e}")
+
         data.update({
             'database_vectors': self.database_vectors,
             'database_seeds': [s.to_dict() for s in self.database_seeds],
-            'archive_size': len(self.archive),
-            'objective_uncovered': self.objective_uncovered,
-            'best_per_objective': self.best_per_objective,
+            'archive': archive_data,
+            'objective_uncovered': list(self.objective_uncovered),
+            'best_per_objective': list(self.best_per_objective),
+            'initial_db_size': self.initial_db_size,
+            'ensemble_paths': ensemble_paths,
         })
         return data
 
@@ -248,8 +271,34 @@ class SAMOTAFuzzer(Fuzzer):
         super()._restore_checkpoint_data(data)
         self.database_vectors = data.get('database_vectors', [])
         self.database_seeds = [FuzzSeed.load_from_dict(d) for d in data.get('database_seeds', [])]
-        self.objective_uncovered = data.get('objective_uncovered', list(range(N_OBJECTIVES)))
-        self.best_per_objective = data.get('best_per_objective', [float('inf')] * N_OBJECTIVES)
+        self.objective_uncovered = list(data.get('objective_uncovered', list(range(N_OBJECTIVES))))
+        self.best_per_objective = list(data.get('best_per_objective', [float('inf')] * N_OBJECTIVES))
+        self.initial_db_size = data.get('initial_db_size', self.initial_db_size)
+
+        # Restore archive
+        self.archive = []
+        for entry in data.get('archive', []):
+            c = SamotaCandidate(entry['features'])
+            c.set_objective_values(entry['objective_values'])
+            for obj in entry.get('objectives_covered', []):
+                c.add_objective_covered(obj)
+            self.archive.append(c)
+
+        # Restore ensembles
+        self.ensembles = []
+        for entry in data.get('ensemble_paths', []):
+            path = entry.get('path', '')
+            if os.path.exists(path):
+                try:
+                    from fuzzer.misc.surrogate_models import EnsembleSurrogate
+                    ens = EnsembleSurrogate.load(path)
+                    self.ensembles.append(ens)
+                except Exception as e:
+                    logger.warning(f"Failed to load ensemble from {path}: {e}")
+
+        logger.info(f"Restored SAMOTA: DB={len(self.database_seeds)} "
+                     f"Archive={len(self.archive)} Ensembles={len(self.ensembles)} "
+                     f"Uncovered={len(self.objective_uncovered)}")
 
     def save_checkpoint(self):
         super().save_checkpoint()
@@ -265,24 +314,43 @@ class SAMOTAFuzzer(Fuzzer):
         container_restart_interval = 300.0
         last_restart_time = time.time()
 
-        # ── Phase 1: Build initial database ──
-        while len(self.database_seeds) < self.initial_db_size:
-            if self.termination_check(start_time):
-                return
+        # ── Phase 1: Build initial database (skip if restored from checkpoint) ──
+        if len(self.database_seeds) >= self.initial_db_size:
+            logger.info(f"Initial database already has {len(self.database_seeds)} entries (restored from checkpoint).")
+        else:
+            logger.info(f"Building initial database ({len(self.database_seeds)}/{self.initial_db_size})...")
+            while len(self.database_seeds) < self.initial_db_size:
+                if self.termination_check(start_time):
+                    return
 
-            self.global_search_step += 1
-            logger.info(f"=== Init {len(self.database_seeds)+1}/{self.initial_db_size} ===")
+                self.global_search_step += 1
+                logger.info(f"=== Init {len(self.database_seeds)+1}/{self.initial_db_size} ===")
 
-            try:
-                seed = self._sample_seed()
-                seed.set_id(f"gen_{self.global_search_step}_init_{len(self.database_seeds)}")
-            except RuntimeError:
-                continue
+                try:
+                    seed = self._sample_seed()
+                    seed.set_id(f"gen_{self.global_search_step}_init_{len(self.database_seeds)}")
+                except RuntimeError:
+                    continue
 
-            self._evaluate_and_store([seed])
+                self._evaluate_and_store([seed])
+                self.save_checkpoint()
+
+            logger.info(f"Initial database complete: {len(self.database_seeds)} entries.")
+
+        # Rebuild archive from full database if empty (e.g., first run or old checkpoint)
+        if not self.archive and self.database_vectors:
+            logger.info("Rebuilding archive from database...")
+            all_candidates = []
+            for fv, ov in self.database_vectors:
+                c = SamotaCandidate(fv)
+                c.set_objective_values(ov)
+                all_candidates.append(c)
+            update_samota_archive(
+                all_candidates, self.objective_uncovered, self.archive,
+                N_OBJECTIVES, self.thresholds)
+            logger.info(f"Archive rebuilt: {len(self.archive)} entries, "
+                         f"uncovered: {len(self.objective_uncovered)}")
             self.save_checkpoint()
-
-        logger.info(f"Initial database: {len(self.database_seeds)} entries.")
 
         # ── Phase 2: SAMOTA loop ──
         while not self.termination_check(start_time):
@@ -304,7 +372,7 @@ class SAMOTAFuzzer(Fuzzer):
 
             # ── Global Search (surrogate-guided NSGA-II) ──
             logger.info("Global Search...")
-            gs_candidates = global_search(
+            gs_candidates, trained_ensembles = global_search(
                 database=db_candidates,
                 objective_uncovered=list(self.objective_uncovered),
                 pop_size=self.gs_pop_size,
@@ -312,6 +380,7 @@ class SAMOTAFuzzer(Fuzzer):
                 lb=lb, ub=ub,
                 n_objectives=N_OBJECTIVES,
             )
+            self.ensembles = trained_ensembles  # cache for checkpoint
 
             # Candidate vectors → nearest scenario → mutate → simulate
             gs_seeds = self._candidates_to_seeds(gs_candidates)

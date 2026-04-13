@@ -196,6 +196,17 @@ class EnsembleSurrogate:
         logger.debug(f"Ensemble obj={self.objective_index}: "
                      f"w_rbf={self.w_rbf:.3f} w_poly={self.w_poly:.3f} w_kr={self.w_kriging:.3f}")
 
+    def save(self, path: str):
+        """Save ensemble to disk."""
+        import joblib
+        joblib.dump(self, path)
+
+    @classmethod
+    def load(cls, path: str):
+        """Load ensemble from disk."""
+        import joblib
+        return joblib.load(path)
+
     def predict(self, x: np.ndarray):
         """Return (prediction, uncertainty) tuple."""
         try:

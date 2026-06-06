@@ -1,0 +1,30 @@
+{
+    "apollo_root": "fill your root",
+    "map_name": "san_mateo",
+    "container_name_prefix": "drivora-apollo",
+    "bridge_port": 9090,
+    "dreamview_port": 8888,
+    "gpu": 0,
+    "cpu": 24.0,
+    "trigger_time": 0.0,
+    "auto_stop_container": false,
+    "start_modules": true,
+    "start_dreamview": true,
+    "apollo_modules": [
+        "Transform", "Localization", "Perception",
+        "Prediction", "Planning", "Control", "Routing"
+    ],
+    "publishers": [
+        "publisher.camera", "publisher.lidar", "publisher.imu",
+        "publisher.gnss", "publisher.chassis",
+        "publisher.routing_request", "publisher.control_pad"
+    ],
+    "calibration": {
+        "flip_y": true,
+        "yaw_offset_deg": 0.0,
+        "map_origin_x": 0.0,
+        "map_origin_y": 0.0,
+        "utm_origin_x": 0.0,
+        "utm_origin_y": 0.0
+    }
+}

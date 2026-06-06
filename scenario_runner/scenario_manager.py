@@ -203,7 +203,11 @@ class ScenarioManager(object):
         else:
             self.world.wait_for_tick()
 
-        self.client.set_timeout(30.0)  # restore normal timeout
+        # Generous per-tick timeout: under heavy/parallel GPU load a CARLA frame
+        # can occasionally take >30s; 30s aborted scenarios mid-route. 120s only
+        # trips if the simulator is genuinely dead. (Real fix for throughput is
+        # putting CARLA and Apollo on SEPARATE GPUs so rendering isn't starved.)
+        self.client.set_timeout(120.0)  # restore normal timeout (raised for parallel)
 
     def run(self):
         logger.info(f"[ScenarioManager] Running scenario {self.scenario_config.id}")

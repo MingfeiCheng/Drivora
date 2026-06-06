@@ -125,6 +125,12 @@ class Fuzzer:
         if self.agent_entry_point is None:
             raise ValueError("Please provide a valid agent entry point.")
         self.agent_config_path = self.agent_config.get('config_path', {})
+        # optional ADS backend manager (e.g. Apollo): manages one backend per
+        # CARLA worker (lifecycle / health / restart) and yields a per-worker
+        # agent config (apollo_host of that container). Falls back to static
+        # agent.worker_config_paths, else None (single shared / no backend).
+        self.backend_manager = None
+        self.worker_agent_configs = self._setup_ads_backend()
 
         # time accounting
         self.time_counter_file = os.path.join(self.tmp_dir, 'time_counter.txt')
@@ -153,6 +159,7 @@ class Fuzzer:
             carla_fps=GlobalConfig.carla_fps,
             random_seed=GlobalConfig.carla_random_seed,
             is_sync=GlobalConfig.carla_is_sync,
+            worker_agent_configs=self.worker_agent_configs,
         )
 
         # sub-configs (subclass creates actual objects from these)
@@ -420,8 +427,52 @@ class Fuzzer:
         """Main fuzzing loop — must be overridden."""
         raise NotImplementedError
 
+    def _setup_ads_backend(self):
+        """Instantiate the ADS backend manager (if agent.backend is configured),
+        bring up one backend per worker, and return the per-worker config paths.
+        ADS-agnostic: the class is named via agent.backend.entry_point ('mod:Cls')
+        and must expose bring_up()->List[str], ensure_healthy(idx), shutdown()."""
+        # defaults (no ADS backend / multi_seed): one ego per worker
+        self.ads_topology = 'multi_seed'
+        self.num_ads = 1
+        backend_cfg = self.agent_config.get('backend', None)
+        if backend_cfg:
+            import importlib
+            params = OmegaConf.to_container(backend_cfg, resolve=True)
+            ep = params.pop('entry_point')
+            topology = params.pop('topology', 'multi_seed')
+            num_ads = params.pop('num_ads', None)
+            self.ads_topology = topology
+            mod_name, cls_name = ep.split(':')
+            cls = getattr(importlib.import_module(mod_name), cls_name)
+            if topology == 'multi_ads':
+                # 1 CARLA world, N Apollo (one per ego). distribute_num must be 1.
+                n = int(num_ads) if num_ads else 2
+                self.num_ads = n
+                self.backend_manager = cls(num=n, topology=topology,
+                    reuse_existing=self.resume, log_dir=os.path.join(self.output_root, 'apollo_logs'),
+                    run_tag=GlobalConfig.run_tag, drivora_root=os.getcwd(), **params)
+                cfgs = self.backend_manager.bring_up()        # [ads0..adsN]
+                logger.info(f"[ADS backend] multi_ads: 1 sim x {len(cfgs)} ADS (per ego)")
+                return [cfgs]                                 # one worker, N ego configs
+            # multi_seed: N CARLA x 1 ADS each (paired by index)
+            n = GlobalConfig.parallel_num
+            self.backend_manager = cls(num=n, topology=topology,
+                reuse_existing=self.resume, log_dir=os.path.join(self.output_root, 'apollo_logs'),
+                run_tag=GlobalConfig.run_tag, drivora_root=os.getcwd(), **params)
+            cfgs = self.backend_manager.bring_up()            # [ads0..adsN]
+            logger.info(f"[ADS backend] multi_seed: {len(cfgs)} sims x 1 ADS each")
+            return [[c] for c in cfgs]                        # N workers, 1 ego each
+        wcp = self.agent_config.get('worker_config_paths', None)
+        return [[c] for c in wcp] if wcp else None            # static: 1 ego per worker
+
     def close(self):
         self.cleanup_all_subprocesses()
+        if getattr(self, 'backend_manager', None) is not None:
+            try:
+                self.backend_manager.shutdown()
+            except Exception as e:
+                logger.warning(f"[ADS backend] shutdown error: {e}")
 
     # ──────────────────────────────────────────────────────────────
     # Time budget
@@ -472,6 +523,52 @@ class Fuzzer:
             except Exception as e:
                 logger.error(f"Failed to restart {op_cfg.container_name}: {e}")
 
+    # CARLA-death signatures that appear in a scenario's eval.log when the
+    # simulator process exited / hung (vs. a real scenario outcome).
+    _CARLA_DIED_MARKERS = (
+        "waiting for the simulator",        # "time-out of Nms while waiting for the simulator"
+        "rpc::rpc_error",
+        "failed to connect",
+        "connection refused",
+        "connection reset",
+        "broken pipe",
+        "actively refused",
+        "carla_stall_kill",                 # runner sentinel: subprocess idle-killed
+        "hard_timeout_kill",                # runner sentinel: hard-timeout-killed
+    )
+
+    def _carla_died(self, scenario_dir) -> bool:
+        """Heuristic: did CARLA die/hang during this scenario? Scans eval.log for
+        the simulator-connection failure signatures (tick time-out, rpc error,
+        connection lost). These mean the sim — not the scenario — failed, so the
+        run should be marked an infra failure and the container restarted."""
+        if not scenario_dir:
+            return False
+        log_path = os.path.join(scenario_dir, 'eval.log')
+        try:
+            with open(log_path, 'r', errors='ignore') as f:
+                # only the tail matters; the failure is at the end
+                txt = f.read()[-20000:].lower()
+        except OSError:
+            return False
+        return any(m in txt for m in self._CARLA_DIED_MARKERS)
+
+    def _restart_carla(self, op_cfg):
+        """Stop+start ONE CARLA container (fault recovery after it died/hung) so
+        the pool hands back a clean simulator for the next job."""
+        ctn = CtnSimOperator(
+            idx=op_cfg.idx,
+            container_name=op_cfg.container_name,
+            gpu=op_cfg.gpu,
+            random_seed=op_cfg.random_seed,
+            docker_image=op_cfg.docker_image,
+            fps=op_cfg.fps,
+            is_sync_mode=op_cfg.is_sync_mode,
+        )
+        ctn.stop()
+        ctn.start()
+        logger.warning(f"CARLA container {op_cfg.container_name} restarted (fault recovery).")
+
     # ──────────────────────────────────────────────────────────────
     # Scenario execution (subprocess)
     # ──────────────────────────────────────────────────────────────
@@ -498,6 +595,14 @@ class Fuzzer:
 
         scenario_json_path = os.path.join(scenario_dir, "scenario.json")
         ctn_json_path = os.path.join(scenario_dir, "ctn_config.json")
+
+        # Per-ego agent backend: point each ego at the ADS config bound to this
+        # acquired CARLA worker. multi_seed -> 1 config for the (single) ego;
+        # multi_ads -> ego k connects to ADS k. No-op for agents without configs.
+        ego_cfgs = getattr(ctn_config, "agent_config_paths", None)
+        if ego_cfgs:
+            for k, ego in enumerate(scenario_config.ego_vehicles):
+                ego.config_path = ego_cfgs[k] if k < len(ego_cfgs) else ego_cfgs[-1]
 
         with open(scenario_json_path, "w") as f:
             json.dump(scenario_config.model_dump(), f, indent=4)
@@ -547,7 +652,9 @@ class Fuzzer:
         child_pid = process.pid
         self.subprocess_pids.append(child_pid)
 
-        stall_timeout = 120.0  # kill if log has no update for this long
+        stall_timeout = 300.0  # kill if log has no update for this long (raised
+        # from 120s: under heavy/parallel GPU load a CARLA tick can pause well past
+        # 120s without the scenario being dead, which was killing long routes early)
         last_log_mtime = time.time()
 
         start_ts = time.time()
@@ -557,6 +664,12 @@ class Fuzzer:
             # Hard timeout
             if elapsed > timeout:
                 logger.error(f"TIMEOUT {elapsed:.1f}/{timeout}s. Killing PID={child_pid}")
+                try:
+                    f_log.write(f"\n[runner] HARD_TIMEOUT_KILL after {elapsed:.1f}s "
+                                f"(scenario subprocess unresponsive; likely simulator hang)\n")
+                    f_log.flush()
+                except Exception:
+                    pass
                 try:
                     os.killpg(os.getpgid(child_pid), signal.SIGKILL)
                 except Exception:
@@ -573,6 +686,12 @@ class Fuzzer:
 
             if time.time() - last_log_mtime > stall_timeout:
                 logger.error(f"STALL detected: eval.log not updated for {stall_timeout}s. Killing PID={child_pid}")
+                try:
+                    f_log.write(f"\n[runner] CARLA_STALL_KILL: eval.log idle for "
+                                f"{stall_timeout}s (simulator stalled/unresponsive)\n")
+                    f_log.flush()
+                except Exception:
+                    pass
                 try:
                     os.killpg(os.getpgid(child_pid), signal.SIGKILL)
                 except Exception:
@@ -628,21 +747,62 @@ class Fuzzer:
         def run_one(ind_index, ind):
             try:
                 ctn_cfg = self.ctn_manager.acquire(timeout=None)
+                # fault tolerance: ensure this worker's ADS backend is alive
+                # (restart it if it crashed) before dispatching the scenario.
+                if self.backend_manager is not None:
+                    if not self.backend_manager.ensure_healthy(ctn_cfg.idx):
+                        logger.error(f"[ADS backend {ctn_cfg.idx}] unhealthy; skip job {ind.id}")
+                        return {"index": ind_index, "status": False, "scenario_dir": None,
+                                "gpu": ctn_cfg.gpu, "reason": "backend_unhealthy"}
+                    # show where to watch THIS scenario live
+                    _dv = getattr(self.backend_manager, 'dreamview_url', lambda i: None)(ctn_cfg.idx)
+                    logger.info(f"[run {ind.id}] worker {ctn_cfg.idx} ({ctn_cfg.container_name})"
+                                + (f"  ▶ watch: {_dv}" if _dv else ""))
                 scenario_dir = os.path.join(self.result_folder, f"{ind.id}")
 
-                run_status, scenario_dir, child_pid = self.execute_instance(
-                    venv_dir=GlobalConfig.ads_venv_dir,
-                    scenario_execute_script=GlobalConfig.scenario_executor_script,
-                    scenario_entry_point=self.SCENARIO_ENTRY,
-                    scenario_config=ind.scenario,
-                    ctn_config=ctn_cfg,
-                    scenario_dir=scenario_dir,
-                    manager_name=self.MANAGER_NAME,
-                    max_sim_time=GlobalConfig.max_sim_time,
-                    debug=GlobalConfig.debug,
-                    pytree_debug=GlobalConfig.pytree_debug,
-                    open_vis=GlobalConfig.open_vis,
-                )
+                # Fault tolerance: if CARLA dies/hangs mid-scenario, end this run,
+                # restart the simulator (so it doesn't cascade to later jobs) and
+                # retry once on the fresh container; mark infra-failure if it dies
+                # again. CARLA_DEATH_RETRIES=0 -> just mark failed, no retry.
+                max_attempts = 1 + getattr(GlobalConfig, 'carla_death_retries', 1)
+                for attempt in range(max_attempts):
+                    run_status, scenario_dir, child_pid = self.execute_instance(
+                        venv_dir=GlobalConfig.ads_venv_dir,
+                        scenario_execute_script=GlobalConfig.scenario_executor_script,
+                        scenario_entry_point=self.SCENARIO_ENTRY,
+                        scenario_config=ind.scenario,
+                        ctn_config=ctn_cfg,
+                        scenario_dir=scenario_dir,
+                        manager_name=self.MANAGER_NAME,
+                        max_sim_time=GlobalConfig.max_sim_time,
+                        debug=GlobalConfig.debug,
+                        pytree_debug=GlobalConfig.pytree_debug,
+                        open_vis=GlobalConfig.open_vis,
+                    )
+
+                    if not self._carla_died(scenario_dir):
+                        break  # normal completion (success / real scenario failure)
+
+                    last = attempt == max_attempts - 1
+                    logger.error(
+                        f"[run {ind.id}] CARLA (worker {ctn_cfg.idx} "
+                        f"{ctn_cfg.container_name}) died/unresponsive; restarting it"
+                        + ("" if last else f" and retrying ({attempt + 1}/{max_attempts - 1})"))
+                    try:
+                        self._restart_carla(ctn_cfg)
+                        # let the ADS backend recover too if it shares the fate
+                        if self.backend_manager is not None:
+                            self.backend_manager.ensure_healthy(ctn_cfg.idx)
+                    except Exception as e:
+                        logger.error(f"[run {ind.id}] CARLA restart failed: {e}")
+                    if last:
+                        return {
+                            "index": ind_index,
+                            "status": False,
+                            "scenario_dir": scenario_dir,
+                            "gpu": ctn_cfg.gpu,
+                            "reason": "carla_died",
+                        }
 
                 return {
                     "index": ind_index,

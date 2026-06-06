@@ -17,6 +17,9 @@ class GlobalConfig:
     # scenario settings
     max_sim_time: float = 120.0  # seconds, default is 300 seconds
     output_root: str = ""  # also used in fuzzing
+    # fault tolerance: if CARLA dies/hangs mid-scenario, restart it and retry the
+    # job this many times before marking it an infra failure (0 = mark, no retry)
+    carla_death_retries: int = 1
     
     # carla settings
     carla_image: str = "carlasim/carla:0.9.15"

@@ -11,10 +11,20 @@
 </div>
 
 <p align="center">
+  <a href="https://discord.gg/PpuwMwBWDS"><img src="https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white" alt="Discord"/></a>
+</p>
+
+<p align="center">
   <img src="assets/demo1.gif" width="22%"/>&nbsp;&nbsp;&nbsp;
   <img src="assets/demo2.gif" width="22%"/>&nbsp;&nbsp;&nbsp;
   <img src="assets/demo3.gif" width="22%"/>&nbsp;&nbsp;&nbsp;
   <img src="assets/demo4.gif" width="22%"/>
+</p>
+
+<p align="center">
+  <img src="assets/demo_apollo.gif" width="70%"/>
+  <br/>
+  <em>Baidu Apollo (real LiDAR/camera/GNSS perception) driving with interactive NPC vehicles in CARLA</em>
 </p>
 
 ---
@@ -143,7 +153,7 @@ Drivora/
 
 ## ADS Corpus
 
-**12 ADS agents** supported, covering end-to-end, vision-language, module-based, and container-based systems:
+**13 ADS agents** supported, covering end-to-end, vision-language, module-based, and container-based systems:
 
 | Agent | Type | Repository | Drivora Doc |
 |-------|------|------------|-------------|
@@ -159,6 +169,7 @@ Drivora/
 | Simlingo | Vision-Language | [Simlingo](https://github.com/RenzKa/simlingo) | [doc](agent_corpus/simlingo/README_drivora.md) |
 | Orion | Vision-Language | [Orion](https://github.com/xiaomi-mlab/Orion) | [doc](agent_corpus/orion/README_drivora.md) |
 | Pylot | Module-Based (Container) | [Pylot](https://github.com/erdos-project/pylot) | [doc](agent_corpus/pylot/README_drivora.md) |
+| Apollo | Module-Based (Container, real perception) | [Apollo](https://github.com/ApolloAuto/apollo) | [doc](agent_corpus/apollo/README.md) |
 
 
 ## Testing Tools

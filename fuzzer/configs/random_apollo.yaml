@@ -1,0 +1,67 @@
+# Random-fuzzer scenario space for Apollo (real LiDAR perception) on Town01.
+#
+# Apollo runs at low cruise speed with real RTK-localization + perception, so we
+# keep the ODD conservative for the first runs:
+#   - Town01 only (the map Apollo is configured for)
+#   - region box around the proven drivable corridor (CARLA coords)
+#   - straight-ish routes, no forced junction crossing
+#   - a couple of NPC vehicles, at most one pedestrian
+# Widen these once Apollo proves stable.
+
+feedback:
+  scale_collision: 10.0
+  scale_stuck: 180.0
+  scale_destination: 20.0
+
+oracle:
+  collision_recheck: true
+
+mutator:
+  # DEBUG: stop region-route building after ~this many ego/npc routes instead of
+  # enumerating every waypoint pair, and skip the persistent map cache. Lets you
+  # sample ONE scenario almost instantly for debugging. Remove (or comment out)
+  # for a real fuzzing campaign so the full cache is built once and reused.
+  debug_max_routes: 5
+
+scenario_space:
+
+  map_region_space:
+    # NOTE: route building is O(n^2) over driving waypoints in this box (each
+    # pair runs a global route plan) and is cached ONCE to cache/town01_map_cache.json.
+    # Keep the box TIGHT or the first build takes hours. This box hugs the
+    # run25-proven vertical corridor (~x392, y30..305 on road_8_lane_0_1);
+    # widen later once it's working (rebuild = delete the cache file).
+    town: "Town01"
+    region_x_min: 360.0
+    region_x_max: 400.0
+    region_y_min: 30.0
+    region_y_max: 310.0
+
+  ego_space:
+    route_length:
+      - 40.0
+      - 150.0
+    # LANEFOLLOW = pure lane-following, no junction. (LEFT/RIGHT/STRAIGHT/
+    # CHANGELANE* are junction/lane-change maneuvers and REQUIRE corssing_junction
+    # true + a route that actually crosses a junction.) Must match the route_task
+    # keys the builder produces, else build_ego_route_index KeyErrors.
+    ego_task_assignment: "LANEFOLLOW"
+    corssing_junction: false
+
+  npc_vehicle_space:
+    num:
+      - 1
+      - 2
+    route_length:
+      - 40.0
+      - 150.0
+
+  npc_pedestrian_space:
+    num:
+      - 0
+      - 1
+
+  npc_static_space:
+    num:
+      - 0
+      - 1

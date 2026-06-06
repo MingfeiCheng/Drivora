@@ -101,8 +101,34 @@ pkgs/*.egg
 core
 core.*
 pretrained/
+# Source screen-recordings (too large for GitHub; keep the exported .gif instead)
+*.mov
+*.mp4
+assets/demo_apollo.mov
 
 # ===========================
 # Legacy (not tracked)
 # ===========================
 z_drop_fuzzer/
+
+# ===========================
+# Claude / AI assistant artifacts
+# ===========================
+.claude/
+**/.claude/
+.claude.json
+CLAUDE.md
+.aider*
+.cursor/
+
+# ===========================
+# Apollo agent — local scratch & generated files
+# ===========================
+agent_corpus/apollo/debug/
+agent_corpus/apollo/config_bak/
+
+# Keep the Apollo HD map: it is required at runtime but would otherwise be
+# caught by the global "*.bin" rule above. Re-include it.
+!agent_corpus/apollo/map/
+!agent_corpus/apollo/map/**
+!agent_corpus/apollo/map/Town01/*.bin

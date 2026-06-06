@@ -73,6 +73,13 @@ class RandomSampler:
             os.path.join(cache_dir, f"{self.town.lower()}_map_cache.json")
         )
 
+        # DEBUG fast path: when set (int), the region-route builder stops after
+        # collecting roughly this many ego AND npc routes instead of enumerating
+        # every waypoint pair, and the (partial) result is NOT persisted to the
+        # map cache file. Lets you sample one scenario almost instantly for
+        # debugging. Default None = full enumeration + persistent cache.
+        self.debug_max_routes = self.mutation_config.get("debug_max_routes", None)
+
         # local buffer
         # self.ego_route_buffer = [] # if task assign, keep the buffer
         if self.map_cache_file is not None:
@@ -102,7 +109,11 @@ class RandomSampler:
         
         # update cache
         if not self.map_region_space.map_driving_waypoints_cache or not self.map_region_space.map_ego_routes_cache or not self.map_region_space.map_npc_routes_cache:
-            if os.path.isfile(self.map_cache_file) and os.path.getsize(self.map_cache_file) > 0:
+            # debug fast path bypasses the persistent cache (load + save) so it
+            # always does a quick, partial build
+            if (self.debug_max_routes is None
+                    and os.path.isfile(self.map_cache_file)
+                    and os.path.getsize(self.map_cache_file) > 0):
                 self.map_region_space.load_from_file(self.map_cache_file)
             else:
                 cache_wps, cache_ego_routes, cache_npc_routes = self._get_region_driving_wps_routes(
@@ -114,7 +125,8 @@ class RandomSampler:
                 self.map_region_space.map_driving_waypoints_cache = cache_wps
                 self.map_region_space.map_ego_routes_cache = cache_ego_routes
                 self.map_region_space.map_npc_routes_cache = cache_npc_routes
-                self.map_region_space.save_to_file(self.map_cache_file)
+                if self.debug_max_routes is None:
+                    self.map_region_space.save_to_file(self.map_cache_file)
 
         # if len(self.ego_route_buffer) == 0:
         #     self._load_assigned_routes(self.ego_space.ego_task_assignment)
@@ -246,7 +258,18 @@ class RandomSampler:
             - waypoints_trajectory: the current coarse trajectory
             - hop_resolution: distance between the trajectory's waypoints
         """
-        grp = GlobalRoutePlanner(self._map, hop_resolution)
+        # Cache the GlobalRoutePlanner: its constructor rebuilds the full map
+        # topology graph (_build_topology + _build_graph). This method is called
+        # O(n^2) times by the region-route builder, so reconstructing it every
+        # call dominated runtime. Same (map, hop_resolution) -> identical results.
+        cache = getattr(self, "_grp_cache", None)
+        if cache is None or cache.get("map") is not self._map:
+            cache = {"map": self._map, "grp": {}}
+            self._grp_cache = cache
+        grp = cache["grp"].get(hop_resolution)
+        if grp is None:
+            grp = GlobalRoutePlanner(self._map, hop_resolution)
+            cache["grp"][hop_resolution] = grp
         route = []
 
         for i in range(len(waypoints_trajectory) - 1):
@@ -1273,6 +1296,11 @@ class RandomSampler:
 
         logger.info(f"[Region] {len(cached_wps)} driving waypoints in region.")
 
+        # debug fast path: randomize start order so the early-stop below collects
+        # a varied handful of routes instead of whatever sits in one corner
+        if self.debug_max_routes is not None:
+            random.shuffle(cached_wps)
+
         # extract bounds only once
         ego_min, ego_max = self.ego_space.route_length
         npc_min, npc_max = self.npc_vehicle_space.route_length
@@ -1293,6 +1321,15 @@ class RandomSampler:
             desc="Building region routes",
             bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt}"
         ):
+            # debug fast path: stop once we have enough routes (skip full O(n^2))
+            if self.debug_max_routes is not None:
+                ego_n = sum(len(v) for v in ego_task_count_dict.values())
+                npc_n = sum(len(v) for v in npc_task_count_dict.values())
+                if ego_n >= self.debug_max_routes and npc_n >= self.debug_max_routes:
+                    logger.info(f"[Region][debug] early stop after {wp_i} starts: "
+                                f"{ego_n} ego / {npc_n} npc routes collected")
+                    break
+
             start_loc = wp_start.transform.location
 
             for wp_end in cached_wps:

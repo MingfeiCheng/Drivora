@@ -39,6 +39,14 @@ class RandomFuzzer(Fuzzer):
         # 1. scenario space
         self.scenario_space = ScenarioODDSpace(self.pipeline_config['scenario_space'])
 
+        # multi_ads (1 CARLA world, N Apollo): force exactly num_ads egos so every
+        # ADS backend gets its own ego (ego k -> ADS k via per-ego config_path).
+        # Otherwise the default ego_space.num ([1,1]) leaves N-1 Apollos idle.
+        if getattr(self, 'ads_topology', 'multi_seed') == 'multi_ads':
+            n = int(self.num_ads)
+            self.scenario_space.ego_space.num = [n, n]
+            logger.info(f"[multi_ads] forcing ego_space.num = [{n}, {n}] to match {n} ADS backends")
+
         # 2. mutator
         self.mutator = RandomSampler(self.scenario_space, self.mutator_config)
 

@@ -1,0 +1,16 @@
+{
+  "apollo_host": "172.17.0.2",
+  "bridge_port": 9090,
+  "injector_port": 9100,
+  "calibration": {
+    "flip_y": true
+  },
+  "cruise_speed": 6.0,
+  "enable_camera": true,
+  "camera_width": 1920,
+  "camera_height": 1080,
+  "camera_fov": 79.32,
+  "camera_hz": 5.0,
+  "throttle_gain": 1.0,
+  "camera_fov_12mm": 17.68
+}

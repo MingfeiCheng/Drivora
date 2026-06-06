@@ -1,0 +1,609 @@
+{
+  "id": "apollo_demo_junction_npc",
+  "scenario_type": "open_scenario",
+  "ego_vehicles": [
+    {
+      "id": "ego_0",
+      "model": "vehicle.lincoln.mkz2017",
+      "rolename": "hero",
+      "category": "car",
+      "route": [
+        {
+          "x": 338.75,
+          "y": 249.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.75,
+          "y": 247.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.75,
+          "y": 245.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.75,
+          "y": 243.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.75,
+          "y": 241.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.76,
+          "y": 239.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.76,
+          "y": 237.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.76,
+          "y": 235.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.76,
+          "y": 233.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.76,
+          "y": 231.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.76,
+          "y": 229.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.76,
+          "y": 227.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.76,
+          "y": 225.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.77,
+          "y": 223.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.77,
+          "y": 221.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.77,
+          "y": 219.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.77,
+          "y": 217.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.77,
+          "y": 215.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.77,
+          "y": 213.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.77,
+          "y": 211.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.77,
+          "y": 209.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": -89.97,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.77,
+          "y": 207.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": -89.97,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.78,
+          "y": 205.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": -89.97,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.78,
+          "y": 203.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": -89.97,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.78,
+          "y": 201.16,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": -89.97,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.79,
+          "y": 185.65,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": -89.97,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.79,
+          "y": 183.65,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.79,
+          "y": 181.65,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.79,
+          "y": 179.65,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.79,
+          "y": 177.65,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.79,
+          "y": 175.65,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.8,
+          "y": 173.65,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.8,
+          "y": 171.65,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.8,
+          "y": 169.65,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.8,
+          "y": 167.65,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.8,
+          "y": 165.65,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.8,
+          "y": 163.65,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.8,
+          "y": 161.65,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        },
+        {
+          "x": 338.8,
+          "y": 159.65,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANE_FOLLOW"
+        }
+      ],
+      "trigger_time": 0.0,
+      "route_func_coverage": [
+        "lane_type_straight"
+      ],
+      "entry_point": "agent_corpus.apollo.apollo_real_agent:ApolloRealAgent",
+      "config_path": "agent_corpus/apollo/demo/demo_config.json"
+    }
+  ],
+  "npc_vehicles": [
+    {
+      "id": "npc_lead",
+      "model": "vehicle.tesla.model3",
+      "rolename": "npc",
+      "category": "car",
+      "trigger_time": 0.0,
+      "ignore_traffic_lights": true,
+      "route": [
+        {
+          "x": 338.78,
+          "y": 235,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANEFOLLOW"
+        },
+        {
+          "x": 338.78,
+          "y": 220,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANEFOLLOW"
+        },
+        {
+          "x": 338.78,
+          "y": 205,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANEFOLLOW"
+        },
+        {
+          "x": 338.78,
+          "y": 190,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANEFOLLOW"
+        },
+        {
+          "x": 338.78,
+          "y": 175,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANEFOLLOW"
+        },
+        {
+          "x": 338.78,
+          "y": 162,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 270.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANEFOLLOW"
+        }
+      ]
+    },
+    {
+      "id": "npc_oncoming",
+      "model": "vehicle.audi.tt",
+      "rolename": "npc",
+      "category": "car",
+      "trigger_time": 0.0,
+      "ignore_traffic_lights": true,
+      "route": [
+        {
+          "x": 334.8,
+          "y": 160,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 90.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANEFOLLOW"
+        },
+        {
+          "x": 334.8,
+          "y": 178,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 90.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANEFOLLOW"
+        },
+        {
+          "x": 334.8,
+          "y": 196,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 90.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANEFOLLOW"
+        },
+        {
+          "x": 334.8,
+          "y": 214,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 90.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANEFOLLOW"
+        },
+        {
+          "x": 334.8,
+          "y": 232,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 90.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANEFOLLOW"
+        },
+        {
+          "x": 334.8,
+          "y": 246,
+          "z": 0.3,
+          "pitch": 0.0,
+          "yaw": 90.03,
+          "roll": 0.0,
+          "speed": 6.0,
+          "road_option": "LANEFOLLOW"
+        }
+      ]
+    }
+  ],
+  "npc_walkers": [],
+  "npc_statics": [
+    {
+      "id": "npc_2",
+      "model": "vehicle.tesla.model3",
+      "rolename": "npc",
+      "category": "obstacle",
+      "location": {
+        "x": 319.67,
+        "y": 199.16,
+        "z": 0.3,
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0,
+        "speed": 0.0,
+        "road_option": "LANE_FOLLOW"
+      }
+    },
+    {
+      "id": "npc_3",
+      "model": "vehicle.tesla.model3",
+      "rolename": "npc",
+      "category": "obstacle",
+      "location": {
+        "x": 311.67,
+        "y": 199.16,
+        "z": 0.3,
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0,
+        "speed": 0.0,
+        "road_option": "LANE_FOLLOW"
+      }
+    }
+  ],
+  "weather": {
+    "pattern": "clear_noon",
+    "cloudiness": 0,
+    "precipitation": 0,
+    "precipitation_deposits": 0,
+    "wind_intensity": 0,
+    "sun_azimuth_angle": 180,
+    "sun_altitude_angle": 60,
+    "fog_density": 0,
+    "fog_distance": 75,
+    "wetness": 0,
+    "fog_falloff": 0.5
+  },
+  "traffic_light": {
+    "pattern": "none",
+    "yellow_time": 3.0,
+    "red_time": 10.0,
+    "green_time": 20.0
+  },
+  "map_region": {
+    "town": "Town01"
+  }
+}
